@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import { useRouter } from 'expo-router';
 import { addDoc, collection } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useEffect, useState } from 'react';
@@ -9,7 +10,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db, storage } from '../../config/firebase';
 import colors from '../../Utils/colors';
 
-export default function IncidentReportScreen({ navigation }) {
+export default function IncidentReportScreen() {
+  const router = useRouter();
   const [reportType, setReportType] = useState('crime');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState(null);
@@ -28,20 +30,32 @@ export default function IncidentReportScreen({ navigation }) {
     // This would come from Firestore user doc
   };
 
-  const getCurrentLocation = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const loc = await Location.getCurrentPositionAsync({});
-        setLocation({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude
-        });
-      }
-    } catch (error) {
-      console.error('Location error:', error);
+ const getCurrentLocation = async () => {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+
+    if (status !== 'granted') {
+      Alert.alert('Permission denied', 'Location permission is required.');
+      return;
     }
-  };
+
+    const loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Highest,
+    });
+
+    const latitude = loc.coords.latitude;
+    const longitude = loc.coords.longitude;
+
+    setLocation({
+      latitude,
+      longitude,
+      mapsUrl: `https://www.google.com/maps?q=${latitude},${longitude}`,
+    });
+
+  } catch (error) {
+    console.error('Location error:', error);
+  }
+};
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -130,10 +144,11 @@ export default function IncidentReportScreen({ navigation }) {
       Alert.alert(
         'Report Submitted',
         'Thank you for helping keep our community safe. Your report will be reviewed by community leaders.',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
+        [{ text: 'OK', onPress: () => router.push('/home') }]
       );
     } catch (error) {
-      Alert.alert('Error', 'Failed to submit report. Please try again.');
+      Alert.alert('Error', 'Failed to submit report. Please try again.', error.message);
+      console.error('Report submission error:', error);
     } finally {
       setUploading(false);
     }

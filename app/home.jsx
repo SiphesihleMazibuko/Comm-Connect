@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, SafeAreaView, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../config/firebase';
 import colors from '../Utils/colors';
+import {SafeAreaView} from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
   const [userName, setUserName] = useState('');
@@ -42,6 +43,7 @@ export default function HomeScreen() {
   }
 
   return (
+    
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
     <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Header */}
