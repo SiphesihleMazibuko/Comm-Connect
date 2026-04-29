@@ -146,6 +146,7 @@ export default function PinPointScreen() {
               Alert.alert('Success', 'Address deleted');
             } catch (error) {
               Alert.alert('Error', 'Failed to delete address');
+              console.error('Delete address error:', error);
             }
           },
         },
