@@ -46,7 +46,6 @@ export default function PinPointScreen() {
   };
 
   const generateDigitalAddress = (lat, lng) => {
-    // Create a unique digital address based on GPS coordinates
     const latHash = Math.abs(lat).toFixed(4).replace('.', '');
     const lngHash = Math.abs(lng).toFixed(4).replace('.', '');
     return `PIN-${latHash}-${lngHash}`;
