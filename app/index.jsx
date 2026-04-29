@@ -23,7 +23,7 @@ export default function SplashScreen() {
       }),
     ]).start();
 
-    //Navigate after animation
+
     const timer = setTimeout(() => {
       router.replace('/login'); // change if needed
     }, 2500);

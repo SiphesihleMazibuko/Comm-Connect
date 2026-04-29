@@ -45,11 +45,11 @@ export default function LoginScreen() {
 
 
       if (userData.role === 'resident') {
-        router.replace('/home');
+        router.replace('./(tabs)/communityfeed');
       } else if (userData.role === 'community_leader') {
-        router.replace('./screens/communityLeaderDashboard');
+        router.replace('./(tabs)/_layout');
       } else if (userData.role === 'emergency_responder') {
-        router.replace('./screens/emergencyResponderDashboard');
+        router.replace('./(tabs)/_layout');
       } else {
         Alert.alert('Error', 'Invalid user role');
       }

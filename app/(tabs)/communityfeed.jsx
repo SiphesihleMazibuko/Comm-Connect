@@ -113,6 +113,23 @@ export default function CommunityFeedScreen() {
         <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#fff' }}>Community Feed</Text>
         <Text style={{ fontSize: 14, color: '#fff', opacity: 0.8 }}>Stay informed with latest updates</Text>
       </View>
+       <View style={{ flexDirection: 'row', margin: 16, gap: 12 }}>
+              <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
+                <Ionicons name="shield-checkmark" size={24} color={colors.accent} />
+                <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 4 }}>24/7</Text>
+                <Text style={{ fontSize: 12, color: colors.textLight }}>Community Alert</Text>
+              </View>
+              <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
+                <Ionicons name="location" size={24} color={colors.accent} />
+                <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 4 }}>PinPoint</Text>
+                <Text style={{ fontSize: 12, color: colors.textLight }}>Digital Address</Text>
+              </View>
+              <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
+                <Ionicons name="people" size={24} color={colors.accent} />
+                <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 4 }}>Active</Text>
+                <Text style={{ fontSize: 12, color: colors.textLight }}>Community</Text>
+              </View>
+            </View>
 
       {/* Category Filters */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingVertical: 12, paddingHorizontal: 16 }}>

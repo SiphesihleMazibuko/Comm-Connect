@@ -5,8 +5,10 @@ import { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../../config/firebase';
 import colors from '../../Utils/colors';
+import { useRouter } from 'expo-router';
 
-export default function SettingsScreen({ navigation }) {
+export default function SettingsScreen() {
+  const router = useRouter();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [anonymousDefault, setAnonymousDefault] = useState(false);
   const [language, setLanguage] = useState('en');
@@ -67,6 +69,7 @@ export default function SettingsScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             await signOut(auth);
+            router.replace('/login');
           }
         }
       ]

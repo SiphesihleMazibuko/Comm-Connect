@@ -72,24 +72,7 @@ export default function HomeScreen() {
       </View>
 
       {/* Features Grid */}
-      <View style={{ padding: 16 }}>
-        <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text, marginBottom: 16 }}>Quick Actions</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 }}>
-          {features.map((feature, index) => (
-            <TouchableOpacity
-              key={index}
-              style={{ width: '48%', backgroundColor: colors.surface, borderRadius: 16, padding: 16, marginBottom: 12, elevation: 2 }}
-              onPress={() => router.push(feature.screen)}
-            >
-              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: feature.color + '20', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
-                <Ionicons name={feature.icon} size={24} color={feature.color} />
-              </View>
-              <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>{feature.name}</Text>
-              <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 4 }}>{feature.description}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
+
 
       {/* Recent Alerts Preview */}
       <View style={{ padding: 16 }}>
