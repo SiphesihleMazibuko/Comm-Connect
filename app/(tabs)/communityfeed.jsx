@@ -96,6 +96,7 @@ export default function CommunityFeedScreen() {
       setNewPost({ title: '', description: '', type: 'crime_alert' });
     } catch (error) {
       Alert.alert('Error', 'Failed to create post');
+      console.error('Error adding document: ', error);
     } finally {
       setSubmitting(false);
     }
@@ -132,27 +133,53 @@ export default function CommunityFeedScreen() {
             </View>
 
       {/* Category Filters */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingVertical: 12, paddingHorizontal: 16 }}>
-        {['all', 'crime_alert', 'emergency_notice', 'service_update'].map((category) => (
-          <TouchableOpacity
-            key={category}
-            style={{
-              backgroundColor: selectedCategory === category ? colors.accent : colors.surface,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              borderRadius: 20,
-              marginRight: 10,
-              borderWidth: 1,
-              borderColor: selectedCategory === category ? colors.accent : colors.border
-            }}
-            onPress={() => setSelectedCategory(category)}
-          >
-            <Text style={{ color: selectedCategory === category ? '#fff' : colors.text, fontWeight: '500' }}>
-              {category === 'all' ? 'All' : getCategoryLabel(category)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <ScrollView
+  horizontal
+  showsHorizontalScrollIndicator={false}
+  contentContainerStyle={{
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    alignItems: 'center',
+    gap: 10,
+  }}
+  style={{ maxHeight: 52, marginBottom: 4 }}
+>
+  {['all', 'crime_alert', 'emergency_notice', 'service_update'].map((category) => (
+    <TouchableOpacity
+      key={category}
+      style={{
+        backgroundColor: selectedCategory === category ? colors.accent : colors.surface,
+        paddingHorizontal: 18,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1.5,
+        borderColor: selectedCategory === category ? colors.accent : colors.border,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        elevation: selectedCategory === category ? 3 : 1,
+        shadowColor: colors.accent,
+        shadowOpacity: selectedCategory === category ? 0.3 : 0,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 2 },
+      }}
+      onPress={() => setSelectedCategory(category)}
+    >
+      <Ionicons
+        name={category === 'all' ? 'apps' : getCategoryIcon(category)}
+        size={13}
+        color={selectedCategory === category ? '#fff' : getCategoryColor(category)}
+      />
+      <Text style={{
+        color: selectedCategory === category ? '#fff' : colors.text,
+        fontWeight: '600',
+        fontSize: 13,
+      }}>
+        {category === 'all' ? 'All' : getCategoryLabel(category)}
+      </Text>
+    </TouchableOpacity>
+  ))}
+</ScrollView>
 
       {/* Create Post Button (Community Leaders only) */}
       {(userRole === 'community_leader' || userRole === 'leader') && (

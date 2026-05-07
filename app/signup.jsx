@@ -1,7 +1,8 @@
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { router } from 'expo-router';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,23 +14,43 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { auth, db } from '../config/firebase';
+import { auth, db, firebaseConfig } from '../config/firebase';
 import colors from '../Utils/colors';
 
-export default function SignupScreen() {
-  const [selectedRole, setSelectedRole] = useState('');
+const OTP_LENGTH = 6;
 
+const COUNTRY_CODES = [
+  { code: '+27', flag: '🇿🇦', name: 'ZA' },
+  { code: '+1',  flag: '🇺🇸', name: 'US' },
+  { code: '+44', flag: '🇬🇧', name: 'GB' },
+  { code: '+91', flag: '🇮🇳', name: 'IN' },
+  { code: '+61', flag: '🇦🇺', name: 'AU' },
+];
+
+export default function SignupScreen() {
+  // Step management: 'details' → 'otp'
+  const [step, setStep] = useState('details');
+
+  // Form fields
+  const [selectedRole, setSelectedRole] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [idNumber, setIdNumber] = useState('');
   const [location, setLocation] = useState('');
   const [organizationName, setOrganizationName] = useState('');
   const [responderType, setResponderType] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+
+  // OTP state
+  const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''));
+  const [verificationId, setVerificationId] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const recaptchaVerifier = useRef(null);
+  const otpRefs = useRef([]);
 
   const roles = [
     {
@@ -49,13 +70,14 @@ export default function SignupScreen() {
     }
   ];
 
-  const handleSignup = async () => {
+  // ─── Validation & Send OTP ───────────────────────────────────────────────
+  const handleSendOTP = async () => {
     if (!selectedRole) {
       Alert.alert('Error', 'Please select an account type');
       return;
     }
 
-    if (!firstName || !lastName || !email || !phoneNumber || !idNumber || !location || !password || !confirmPassword) {
+    if (!firstName || !lastName || !email || !phoneNumber || !idNumber || !location) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
@@ -70,39 +92,81 @@ export default function SignupScreen() {
       return;
     }
 
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+    const cleaned = phoneNumber.trim().replace(/\s/g, '');
+    const local = cleaned.replace(/^0/, '');
+    const e164 = `${selectedCountry.code}${local}`;
+
+    setLoading(true);
+    try {
+      const provider = new PhoneAuthProvider(auth);
+      const id = await provider.verifyPhoneNumber(e164, recaptchaVerifier.current);
+      setVerificationId(id);
+      setStep('otp');
+      Alert.alert('OTP Sent', `A verification code was sent to ${e164}`);
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ─── OTP Input Handlers ──────────────────────────────────────────────────
+  const handleOtpChange = (value, index) => {
+    if (!/^\d*$/.test(value)) return;
+
+    const newOtp = [...otp];
+
+    if (value.length > 1) {
+      const digits = value.split('').slice(0, OTP_LENGTH - index);
+      digits.forEach((d, i) => {
+        if (index + i < OTP_LENGTH) newOtp[index + i] = d;
+      });
+      setOtp(newOtp);
+      const nextIndex = Math.min(index + digits.length, OTP_LENGTH - 1);
+      otpRefs.current[nextIndex]?.focus();
       return;
     }
 
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+    newOtp[index] = value;
+    setOtp(newOtp);
+
+    if (value && index < OTP_LENGTH - 1) {
+      otpRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyPress = (e, index) => {
+    if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+    }
+  };
+
+  // ─── Verify OTP & Create Account ─────────────────────────────────────────
+  const handleVerifyAndCreate = async () => {
+    const otpString = otp.join('');
+    if (otpString.length < OTP_LENGTH) {
+      Alert.alert('Error', 'Please enter the complete 6-digit OTP');
       return;
     }
 
     setLoading(true);
-
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // 1. Verify OTP — creates the phone auth user
+      const credential = PhoneAuthProvider.credential(verificationId, otpString);
+      const userCredential = await signInWithCredential(auth, credential);
       const user = userCredential.user;
 
-      await updateProfile(user, {
-        displayName: `${firstName} ${lastName}`
-      });
-
+      // 2. Write Firestore doc under the SAME phone auth UID
       await setDoc(doc(db, 'users', user.uid), {
         firstName,
         lastName,
         email,
-        phoneNumber,
+        phoneNumber: `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`,
         idNumber,
         location,
         role: selectedRole,
-
         organizationName: selectedRole === 'community_leader' ? organizationName : null,
         responderType: selectedRole === 'emergency_responder' ? responderType : null,
-
-
         permissions: {
           locationEnabled: false,
           notificationsEnabled: false,
@@ -112,18 +176,11 @@ export default function SignupScreen() {
           canRespondToEmergency: selectedRole === 'emergency_responder',
           canSendCommunityAlerts: selectedRole === 'community_leader'
         },
-
         createdAt: new Date().toISOString()
       });
 
-      Alert.alert(
-        'Success',
-        selectedRole === 'resident'
-          ? 'Account created successfully'
-          : 'Account created successfully. Your profile is pending approval.'
-      );
-
-      router.replace('/app/home');
+      // 3. Navigate — the UID will now match on every future login
+      router.replace('/(tabs)/communityfeed');
 
     } catch (error) {
       Alert.alert('Signup Failed', error.message);
@@ -132,189 +189,316 @@ export default function SignupScreen() {
     }
   };
 
-  const renderRoleSelection = () => {
-    return (
-      <View style={{ marginBottom: 24 }}>
-        <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 12 }}>
-          Select Account Type
-        </Text>
-
-        {roles.map((role) => (
-          <TouchableOpacity
-            key={role.id}
-            onPress={() => setSelectedRole(role.id)}
-            style={{
-              backgroundColor: selectedRole === role.id ? colors.accent : colors.surface,
-              borderRadius: 12,
-              padding: 16,
-              marginBottom: 12,
-              borderWidth: 1,
-              borderColor: selectedRole === role.id ? colors.accent : colors.border
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 16,
-                fontWeight: 'bold',
-                color: selectedRole === role.id ? '#fff' : colors.text
-              }}
-            >
-              {role.title}
-            </Text>
-
-            <Text
-              style={{
-                fontSize: 13,
-                marginTop: 4,
-                color: selectedRole === role.id ? '#fff' : colors.textLight
-              }}
-            >
-              {role.description}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  };
-
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={{ flex: 1, backgroundColor: colors.background }}
     >
+      <FirebaseRecaptchaVerifierModal
+        ref={recaptchaVerifier}
+        firebaseConfig={firebaseConfig}
+        attemptInvisibleVerification={true}
+      />
+
       <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 60, paddingBottom: 40 }}>
+
+        {/* Header */}
         <View style={{ alignItems: 'center', marginBottom: 32 }}>
-          <Text style={{ fontSize: 28, fontWeight: 'bold', color: colors.primary }}>Create Account</Text>
-          <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 8 }}>Join Comm-Connect today</Text>
+          <View style={{
+            width: 80, height: 80,
+            backgroundColor: colors.primary,
+            borderRadius: 40,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginBottom: 16
+          }}>
+            <Text style={{ fontSize: 40 }}>🤝</Text>
+          </View>
+          <Text style={{ fontSize: 28, fontWeight: 'bold', color: colors.primary }}>
+            {step === 'details' ? 'Create Account' : 'Verify Phone'}
+          </Text>
+          <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 8 }}>
+            {step === 'details'
+              ? 'Join Comm-Connect today'
+              : 'Enter the code sent to your phone'}
+          </Text>
         </View>
 
-        {renderRoleSelection()}
-
-        {selectedRole !== '' && (
+        {step === 'details' ? (
           <>
-            <View style={{ marginBottom: 12 }}>
-              <Text style={labelStyle}>First Name</Text>
-              <TextInput style={inputStyle} placeholder="John" value={firstName} onChangeText={setFirstName} />
-            </View>
-
-            <View style={{ marginBottom: 12 }}>
-              <Text style={labelStyle}>Last Name</Text>
-              <TextInput style={inputStyle} placeholder="Doe" value={lastName} onChangeText={setLastName} />
-            </View>
-
-            <View style={{ marginBottom: 12 }}>
-              <Text style={labelStyle}>Email</Text>
-              <TextInput
-                style={inputStyle}
-                placeholder="john@example.com"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-            </View>
-
-            <View style={{ marginBottom: 12 }}>
-              <Text style={labelStyle}>Phone Number</Text>
-              <TextInput
-                style={inputStyle}
-                placeholder="+27 XX XXX XXXX"
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                keyboardType="phone-pad"
-              />
-            </View>
-
-            <View style={{ marginBottom: 12 }}>
-              <Text style={labelStyle}>ID Number</Text>
-              <TextInput
-                style={inputStyle}
-                placeholder="000000 0000 000"
-                value={idNumber}
-                onChangeText={setIdNumber}
-                keyboardType="numeric"
-              />
-            </View>
-
-            <View style={{ marginBottom: 12 }}>
-              <Text style={labelStyle}>Location</Text>
-              <TextInput
-                style={inputStyle}
-                placeholder="Your area, e.g. Soweto, Zone 1"
-                value={location}
-                onChangeText={setLocation}
-              />
-            </View>
-
-            {selectedRole === 'community_leader' && (
-              <View style={{ marginBottom: 12 }}>
-                <Text style={labelStyle}>Community / Organisation Name</Text>
-                <TextInput
-                  style={inputStyle}
-                  placeholder="e.g. Soweto Community Forum"
-                  value={organizationName}
-                  onChangeText={setOrganizationName}
-                />
-              </View>
-            )}
-
-            {selectedRole === 'emergency_responder' && (
-              <View style={{ marginBottom: 12 }}>
-                <Text style={labelStyle}>Responder Type</Text>
-                <TextInput
-                  style={inputStyle}
-                  placeholder="e.g. Police, Ambulance, Fire, Security"
-                  value={responderType}
-                  onChangeText={setResponderType}
-                />
-              </View>
-            )}
-
-            <View style={{ marginBottom: 12 }}>
-              <Text style={labelStyle}>Password</Text>
-              <TextInput
-                style={inputStyle}
-                placeholder="••••••••"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-              />
-            </View>
-
+            {/* ── Role Selection ── */}
             <View style={{ marginBottom: 24 }}>
-              <Text style={labelStyle}>Confirm Password</Text>
-              <TextInput
-                style={inputStyle}
-                placeholder="••••••••"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry
-              />
+              <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 12 }}>
+                Select Account Type
+              </Text>
+              {roles.map((role) => (
+                <TouchableOpacity
+                  key={role.id}
+                  onPress={() => setSelectedRole(role.id)}
+                  style={{
+                    backgroundColor: selectedRole === role.id ? colors.accent : colors.surface,
+                    borderRadius: 12,
+                    padding: 16,
+                    marginBottom: 12,
+                    borderWidth: 1,
+                    borderColor: selectedRole === role.id ? colors.accent : colors.border
+                  }}
+                >
+                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: selectedRole === role.id ? '#fff' : colors.text }}>
+                    {role.title}
+                  </Text>
+                  <Text style={{ fontSize: 13, marginTop: 4, color: selectedRole === role.id ? '#fff' : colors.textLight }}>
+                    {role.description}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {selectedRole !== '' && (
+              <>
+                {/* ── Personal Details ── */}
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={labelStyle}>First Name</Text>
+                  <TextInput style={inputStyle} placeholder="John" value={firstName} onChangeText={setFirstName} />
+                </View>
+
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={labelStyle}>Last Name</Text>
+                  <TextInput style={inputStyle} placeholder="Doe" value={lastName} onChangeText={setLastName} />
+                </View>
+
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={labelStyle}>Email</Text>
+                  <TextInput
+                    style={inputStyle}
+                    placeholder="john@example.com"
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                  />
+                </View>
+
+                {/* ── Phone with country code ── */}
+                <View style={{ marginBottom: 8 }}>
+                  <Text style={labelStyle}>Phone Number</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => setShowCountryPicker(!showCountryPicker)}
+                      style={{
+                        backgroundColor: colors.surface,
+                        borderRadius: 12,
+                        paddingHorizontal: 12,
+                        paddingVertical: 14,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <Text style={{ fontSize: 18 }}>{selectedCountry.flag}</Text>
+                      <Text style={{ fontSize: 15, color: colors.text, fontWeight: '500' }}>{selectedCountry.code}</Text>
+                      <Text style={{ fontSize: 11, color: colors.textLight }}>▼</Text>
+                    </TouchableOpacity>
+
+                    <TextInput
+                      style={[inputStyle, { flex: 1 }]}
+                      placeholder="81 234 5678"
+                      value={phoneNumber}
+                      onChangeText={setPhoneNumber}
+                      keyboardType="phone-pad"
+                      autoComplete="tel"
+                    />
+                  </View>
+                </View>
+
+                {/* Country picker dropdown */}
+                {showCountryPicker && (
+                  <View style={{
+                    backgroundColor: colors.surface,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    marginBottom: 12,
+                    overflow: 'hidden',
+                  }}>
+                    {COUNTRY_CODES.map((country) => (
+                      <TouchableOpacity
+                        key={country.code}
+                        onPress={() => {
+                          setSelectedCountry(country);
+                          setShowCountryPicker(false);
+                        }}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 12,
+                          padding: 14,
+                          borderBottomWidth: 0.5,
+                          borderBottomColor: colors.border,
+                          backgroundColor: selectedCountry.code === country.code ? colors.background : 'transparent',
+                        }}
+                      >
+                        <Text style={{ fontSize: 20 }}>{country.flag}</Text>
+                        <Text style={{ fontSize: 15, color: colors.text }}>{country.name}</Text>
+                        <Text style={{ fontSize: 15, color: colors.textLight, marginLeft: 'auto' }}>{country.code}</Text>
+                        {selectedCountry.code === country.code && (
+                          <Text style={{ color: colors.accent, fontSize: 16 }}>✓</Text>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 16 }}>
+                  Don&apos;t include the country code or leading zero
+                </Text>
+
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={labelStyle}>ID Number</Text>
+                  <TextInput
+                    style={inputStyle}
+                    placeholder="000000 0000 000"
+                    value={idNumber}
+                    onChangeText={setIdNumber}
+                    keyboardType="numeric"
+                  />
+                </View>
+
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={labelStyle}>Location</Text>
+                  <TextInput
+                    style={inputStyle}
+                    placeholder="Your area, e.g. Soweto, Zone 1"
+                    value={location}
+                    onChangeText={setLocation}
+                  />
+                </View>
+
+                {selectedRole === 'community_leader' && (
+                  <View style={{ marginBottom: 12 }}>
+                    <Text style={labelStyle}>Community / Organisation Name</Text>
+                    <TextInput
+                      style={inputStyle}
+                      placeholder="e.g. Soweto Community Forum"
+                      value={organizationName}
+                      onChangeText={setOrganizationName}
+                    />
+                  </View>
+                )}
+
+                {selectedRole === 'emergency_responder' && (
+                  <View style={{ marginBottom: 12 }}>
+                    <Text style={labelStyle}>Responder Type</Text>
+                    <TextInput
+                      style={inputStyle}
+                      placeholder="e.g. Police, Ambulance, Fire, Security"
+                      value={responderType}
+                      onChangeText={setResponderType}
+                    />
+                  </View>
+                )}
+
+                {/* ── Send OTP Button ── */}
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: colors.accent,
+                    borderRadius: 12,
+                    padding: 16,
+                    alignItems: 'center',
+                    marginTop: 12,
+                    marginBottom: 16,
+                    opacity: loading ? 0.7 : 1,
+                  }}
+                  onPress={handleSendOTP}
+                  disabled={loading}
+                >
+                  {loading
+                    ? <ActivityIndicator color="#fff" />
+                    : <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Send OTP</Text>
+                  }
+                </TouchableOpacity>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            {/* ── OTP Step ── */}
+            <Text style={{ fontSize: 14, fontWeight: '500', color: colors.text, marginBottom: 16, textAlign: 'center' }}>
+              Enter verification code
+            </Text>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 16 }}>
+              {otp.map((digit, index) => (
+                <TextInput
+                  key={index}
+                  ref={(ref) => (otpRefs.current[index] = ref)}
+                  style={{
+                    width: 46,
+                    height: 56,
+                    backgroundColor: colors.surface,
+                    borderRadius: 12,
+                    borderWidth: digit ? 2 : 1,
+                    borderColor: digit ? colors.accent : colors.border,
+                    fontSize: 22,
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    color: colors.text,
+                  }}
+                  value={digit}
+                  onChangeText={(val) => handleOtpChange(val, index)}
+                  onKeyPress={(e) => handleOtpKeyPress(e, index)}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  selectTextOnFocus
+                  autoFocus={index === 0}
+                />
+              ))}
             </View>
 
             <TouchableOpacity
-              style={{ backgroundColor: colors.accent, borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 16 }}
-              onPress={handleSignup}
+              onPress={() => {
+                setStep('details');
+                setOtp(Array(OTP_LENGTH).fill(''));
+              }}
+              style={{ alignItems: 'center', marginBottom: 24 }}
+            >
+              <Text style={{ color: colors.accent, fontSize: 13 }}>← Change details</Text>
+            </TouchableOpacity>
+
+            {/* ── Verify & Create Button ── */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: colors.accent,
+                borderRadius: 12,
+                padding: 16,
+                alignItems: 'center',
+                marginBottom: 16,
+                opacity: loading ? 0.7 : 1,
+              }}
+              onPress={handleVerifyAndCreate}
               disabled={loading}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Sign Up</Text>
-              )}
+              {loading
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Verify & Create Account</Text>
+              }
             </TouchableOpacity>
           </>
         )}
 
+        {/* ── Login Link ── */}
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
           <Text style={{ textAlign: 'center', color: colors.primary, fontSize: 14 }}>
             Already have an account?
           </Text>
-
           <TouchableOpacity onPress={() => router.push('/login')}>
             <Text style={{ fontWeight: 'bold', color: colors.accent }}> Login</Text>
           </TouchableOpacity>
         </View>
+
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -334,4 +518,4 @@ const inputStyle = {
   fontSize: 16,
   borderWidth: 1,
   borderColor: colors.border
-};      
+};
