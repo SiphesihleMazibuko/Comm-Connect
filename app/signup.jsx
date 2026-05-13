@@ -40,7 +40,7 @@ export default function SignupScreen() {
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [idNumber, setIdNumber] = useState('');
-  const [location, setLocation] = useState('');
+  const [area, setArea] = useState('');
   const [organizationName, setOrganizationName] = useState('');
   const [responderType, setResponderType] = useState('');
 
@@ -77,7 +77,7 @@ export default function SignupScreen() {
       return;
     }
 
-    if (!firstName || !lastName || !email || !phoneNumber || !idNumber || !location) {
+    if (!firstName || !lastName || !email || !phoneNumber || !idNumber || !area) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
@@ -163,7 +163,7 @@ export default function SignupScreen() {
         email,
         phoneNumber: `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`,
         idNumber,
-        location,
+        area,
         role: selectedRole,
         organizationName: selectedRole === 'community_leader' ? organizationName : null,
         responderType: selectedRole === 'emergency_responder' ? responderType : null,
@@ -368,12 +368,12 @@ export default function SignupScreen() {
                 </View>
 
                 <View style={{ marginBottom: 12 }}>
-                  <Text style={labelStyle}>Location</Text>
+                  <Text style={labelStyle}>Area</Text>
                   <TextInput
                     style={inputStyle}
                     placeholder="Your area, e.g. Soweto, Zone 1"
-                    value={location}
-                    onChangeText={setLocation}
+                    value={area}
+                    onChangeText={setArea}
                   />
                 </View>
 
