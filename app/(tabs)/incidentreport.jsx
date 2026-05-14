@@ -29,8 +29,7 @@ export default function IncidentReportScreen() {
     loadUserPinpoints();
   }, []);
 
-  // ─── Load user's saved pinpoints from Firestore ───────────────────────────
-  const loadUserPinpoints = async () => {
+    const loadUserPinpoints = async () => {
     if (!user) return;
     setLoadingPinpoints(true);
     try {
@@ -41,7 +40,7 @@ export default function IncidentReportScreen() {
         pins.push({ id: doc.id, ...doc.data() });
       });
       setSavedPinpoints(pins);
-      // Auto-select the first saved pinpoint
+
       if (pins.length > 0) setSelectedPinpoint(pins[0]);
     } catch (error) {
       console.error('Error loading pinpoints:', error);
@@ -50,7 +49,6 @@ export default function IncidentReportScreen() {
     }
   };
 
-  // ─── Image Handlers ──────────────────────────
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -87,7 +85,7 @@ export default function IncidentReportScreen() {
     setImages(newImages);
   };
 
-  // ─── Upload Images to Firebase Storage ───────────────────────────────────
+
  const uploadImages = async () => {
   const uploadedUrls = [];
 
@@ -128,7 +126,6 @@ export default function IncidentReportScreen() {
   return uploadedUrls;
 };
 
-  // ─── Submit Report ────────────────────────────────────────────────────────
   const handleSubmitReport = async () => {
       console.log('=== SUBMIT DEBUG ===');
   console.log('reportType:', reportType);
