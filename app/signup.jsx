@@ -70,45 +70,46 @@ export default function SignupScreen() {
     }
   ];
 
-  // ─── Validation & Send OTP ───────────────────────────────────────────────
-  const handleSendOTP = async () => {
-    if (!selectedRole) {
-      Alert.alert('Error', 'Please select an account type');
-      return;
-    }
 
-    if (!firstName || !lastName || !email || !phoneNumber || !idNumber || !location) {
-      Alert.alert('Error', 'Please fill in all required fields');
-      return;
-    }
+// ─── Mock Send OTP (no real SMS) ─────────────────────────────────────────
+const handleSendOTP = async () => {
+  if (!selectedRole) {
+    Alert.alert('Error', 'Please select an account type');
+    return;
+  }
 
-    if (selectedRole === 'community_leader' && !organizationName) {
-      Alert.alert('Error', 'Please enter your community or organisation name');
-      return;
-    }
+  if (!firstName || !lastName || !email || !phoneNumber || !idNumber || !location) {
+    Alert.alert('Error', 'Please fill in all required fields');
+    return;
+  }
 
-    if (selectedRole === 'emergency_responder' && !responderType) {
-      Alert.alert('Error', 'Please enter your responder type');
-      return;
-    }
+  if (selectedRole === 'community_leader' && !organizationName) {
+    Alert.alert('Error', 'Please enter your community or organisation name');
+    return;
+  }
 
-    const cleaned = phoneNumber.trim().replace(/\s/g, '');
-    const local = cleaned.replace(/^0/, '');
-    const e164 = `${selectedCountry.code}${local}`;
+  if (selectedRole === 'emergency_responder' && !responderType) {
+    Alert.alert('Error', 'Please enter your responder type');
+    return;
+  }
 
-    setLoading(true);
-    try {
-      const provider = new PhoneAuthProvider(auth);
-      const id = await provider.verifyPhoneNumber(e164, recaptchaVerifier.current);
-      setVerificationId(id);
-      setStep('otp');
-      Alert.alert('OTP Sent', `A verification code was sent to ${e164}`);
-    } catch (error) {
-      Alert.alert('Error', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // MOCK MODE: Generate a fake verification ID
+  setLoading(true);
+  try {
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Create a mock verification ID
+    const mockVerificationId = 'mock_' + Date.now();
+    setVerificationId(mockVerificationId);
+    setStep('otp');
+    Alert.alert('OTP Sent (MOCK)', `Any 6-digit code will work for testing.\n\nTest code: 123456`);
+  } catch (error) {
+    Alert.alert('Error', error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ─── OTP Input Handlers ──────────────────────────────────────────────────
   const handleOtpChange = (value, index) => {
@@ -141,53 +142,72 @@ export default function SignupScreen() {
     }
   };
 
-  // ─── Verify OTP & Create Account ─────────────────────────────────────────
-  const handleVerifyAndCreate = async () => {
-    const otpString = otp.join('');
-    if (otpString.length < OTP_LENGTH) {
-      Alert.alert('Error', 'Please enter the complete 6-digit OTP');
-      return;
-    }
+  // ─── Mock Verify OTP & Create Account ─────────────────────────────────────────
+const handleVerifyAndCreate = async () => {
+  const otpString = otp.join('');
+  if (otpString.length < OTP_LENGTH) {
+    Alert.alert('Error', 'Please enter a 6-digit code');
+    return;
+  }
 
-    setLoading(true);
-    try {
-      // 1. Verify OTP — creates the phone auth user
-      const credential = PhoneAuthProvider.credential(verificationId, otpString);
-      const userCredential = await signInWithCredential(auth, credential);
-      const user = userCredential.user;
+  setLoading(true);
+  try {
+    // MOCK MODE: Accept ANY 6-digit code (no real verification)
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Create a mock user ID
+    const mockUserId = 'mock_user_' + Date.now();
+    
+    // Create mock user object
+    const mockUser = {
+      uid: mockUserId,
+      phoneNumber: `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`
+    };
 
-      // 2. Write Firestore doc under the SAME phone auth UID
-      await setDoc(doc(db, 'users', user.uid), {
-        firstName,
-        lastName,
-        email,
-        phoneNumber: `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`,
-        idNumber,
-        location,
-        role: selectedRole,
-        organizationName: selectedRole === 'community_leader' ? organizationName : null,
-        responderType: selectedRole === 'emergency_responder' ? responderType : null,
-        permissions: {
-          locationEnabled: false,
-          notificationsEnabled: false,
-          canReportIncident: true,
-          canRequestEmergency: true,
-          canReviewReports: selectedRole === 'community_leader',
-          canRespondToEmergency: selectedRole === 'emergency_responder',
-          canSendCommunityAlerts: selectedRole === 'community_leader'
-        },
-        createdAt: new Date().toISOString()
-      });
+    // Write Firestore doc with mock user ID
+    await setDoc(doc(db, 'users', mockUserId), {
+      firstName,
+      lastName,
+      email,
+      phoneNumber: `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`,
+      idNumber,
+      location,
+      role: selectedRole,
+      organizationName: selectedRole === 'community_leader' ? organizationName : null,
+      responderType: selectedRole === 'emergency_responder' ? responderType : null,
+      permissions: {
+        locationEnabled: false,
+        notificationsEnabled: false,
+        canReportIncident: true,
+        canRequestEmergency: true,
+        canReviewReports: selectedRole === 'community_leader',
+        canRespondToEmergency: selectedRole === 'emergency_responder',
+        canSendCommunityAlerts: selectedRole === 'community_leader'
+      },
+      createdAt: new Date().toISOString(),
+      isMockUser: true  // Flag to identify mock users
+    });
 
-      // 3. Navigate — the UID will now match on every future login
-      router.replace('/(tabs)/communityfeed');
+    // Show success and navigate to LOGIN
+    Alert.alert(
+      'Account Created Successfully! (Mock Mode)',
+      'Your account has been created. Please login to continue.\n\nNote: This is a test account.',
+      [
+        {
+          text: 'Go to Login',
+          onPress: () => router.replace('/login')
+        }
+      ]
+    );
 
-    } catch (error) {
-      Alert.alert('Signup Failed', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  } catch (error) {
+    console.error('Signup error:', error);
+    Alert.alert('Signup Failed', error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -225,6 +245,7 @@ export default function SignupScreen() {
           </Text>
         </View>
 
+        {/* STEP 1: DETAILS FORM */}
         {step === 'details' ? (
           <>
             {/* ── Role Selection ── */}
@@ -353,7 +374,7 @@ export default function SignupScreen() {
                 )}
 
                 <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 16 }}>
-                  Don&apos;t include the country code or leading zero
+                  Don't include the country code or leading zero
                 </Text>
 
                 <View style={{ marginBottom: 12 }}>
@@ -424,8 +445,8 @@ export default function SignupScreen() {
             )}
           </>
         ) : (
+          /* STEP 2: OTP VERIFICATION */
           <>
-            {/* ── OTP Step ── */}
             <Text style={{ fontSize: 14, fontWeight: '500', color: colors.text, marginBottom: 16, textAlign: 'center' }}>
               Enter verification code
             </Text>
@@ -468,7 +489,7 @@ export default function SignupScreen() {
               <Text style={{ color: colors.accent, fontSize: 13 }}>← Change details</Text>
             </TouchableOpacity>
 
-            {/* ── Verify & Create Button ── */}
+            {/* ── VERIFY & CREATE BUTTON ── */}
             <TouchableOpacity
               style={{
                 backgroundColor: colors.accent,
@@ -517,5 +538,6 @@ const inputStyle = {
   padding: 14,
   fontSize: 16,
   borderWidth: 1,
-  borderColor: colors.border
+  borderColor: colors.border,
+  color: colors.text
 };
