@@ -1,12 +1,16 @@
 export default {
-  primary: '#0A2942',      // Deep Navy - trust
-  accent: '#00A896',        // Teal - reliability  
-  background: '#F8F9FA',    // Off-white - clean
-  surface: '#FFFFFF',       // White cards
-  text: '#334756',          // Slate - readable
-  textLight: '#6C757D',     // Cool gray
-  error: '#DC2626',         
-  success: '#059669',       
+  primary: '#230257',
+  accent: '#F43F5E',
+  background: '#0d023d',
+  surface: '#1A1A1A',
+  text: '#FFFFFF',
+  textLight: '#A1A1AA',
+  error: '#DC2626',
+  success: '#10B981',
   warning: '#F59E0B',
-  border: '#E5E7EB'
+  border: '#27272A',
+  glow: '#8B5CF6',
+  gradient1: '#6D28D9',
+  gradient2: '#F43F5E',
+  gradient3: '#F97316',
 };

@@ -1,7 +1,7 @@
 import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { router } from 'expo-router';
-import { signInWithPhoneNumber } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
+import {  doc, getDoc, collection, query, where, getDocs  } from 'firebase/firestore';
 import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -32,39 +32,56 @@ export default function LoginScreen() {
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''));
-  const [confirmation, setConfirmation] = useState(null); // stores the signInWithPhoneNumber result
+  const [verificationId, setVerificationId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState('phone');
 
+  const recaptchaVerifier = useRef(null);
   const otpRefs = useRef([]);
-  const recaptchaVerifier = useRef(null); // ref for the reCAPTCHA modal
 
-  const handleSendOTP = async () => {
-    const cleaned = phoneNumber.trim().replace(/\s/g, '');
-    if (!cleaned) {
-      Alert.alert('Error', 'Please enter your phone number');
-      return;
-    }
-    const local = cleaned.replace(/^0/, '');
-    const e164 = `${selectedCountry.code}${local}`;
+// Mock mode flag
+const MOCK_MODE = true; // Set to false when you have real SMS API
 
+const handleSendOTP = async () => {
+  const cleaned = phoneNumber.trim().replace(/\s/g, '');
+  if (!cleaned) {
+    Alert.alert('Error', 'Please enter your phone number');
+    return;
+  }
+
+  if (MOCK_MODE) {
+    // Mock mode: just proceed to OTP step
     setLoading(true);
     try {
-      // Pass the recaptchaVerifier ref — required for native reCAPTCHA verification
-      const confirmationResult = await signInWithPhoneNumber(
-        auth,
-        e164,
-        recaptchaVerifier.current
-      );
-      setConfirmation(confirmationResult);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setVerificationId('mock_' + Date.now());
       setStep('otp');
-      Alert.alert('OTP Sent', `A verification code was sent to ${e164}`);
+      Alert.alert('OTP Sent (Mock)', 'Any 6-digit code works in test mode.\n\nTest code: 123456');
     } catch (error) {
       Alert.alert('Error', error.message);
     } finally {
       setLoading(false);
     }
-  };
+    return;
+  }
+
+  // Real mode (when you have SMS API)
+  const local = cleaned.replace(/^0/, '');
+  const e164 = `${selectedCountry.code}${local}`;
+  
+  setLoading(true);
+  try {
+    const provider = new PhoneAuthProvider(auth);
+    const id = await provider.verifyPhoneNumber(e164, recaptchaVerifier.current);
+    setVerificationId(id);
+    setStep('otp');
+    Alert.alert('OTP Sent', `A verification code was sent to ${e164}`);
+  } catch (error) {
+    Alert.alert('Error', error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleOtpChange = (value, index) => {
     if (!/^\d*$/.test(value)) return;
@@ -96,49 +113,80 @@ export default function LoginScreen() {
     }
   };
 
-  const handleVerifyOTP = async () => {
-    const otpString = otp.join('');
-    if (otpString.length < OTP_LENGTH) {
-      Alert.alert('Error', 'Please enter the complete 6-digit OTP');
-      return;
-    }
-    if (!confirmation) {
-      Alert.alert('Error', 'No verification session found. Please request a new OTP.');
-      return;
-    }
+ const handleVerifyOTP = async () => {
+  const otpString = otp.join('');
+  if (otpString.length < OTP_LENGTH) {
+    Alert.alert('Error', 'Please enter the complete 6-digit OTP');
+    return;
+  }
 
-    setLoading(true);
-    try {
-      // Use confirmation.confirm() instead of PhoneAuthProvider.credential + signInWithCredential
-      const userCredential = await confirmation.confirm(otpString);
-      const user = userCredential.user;
-
-      const userRef = doc(db, 'users', user.uid);
-      const userSnap = await getDoc(userRef);
-
-      if (!userSnap.exists()) {
-        router.replace('/(tabs)/communityfeed');
+  setLoading(true);
+  try {
+    if (MOCK_MODE) {
+      // Mock mode: accept any OTP, just find user by phone number
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Find user by phone number in Firestore
+      const phoneNumberFull = `${selectedCountry.code}${phoneNumber.trim().replace(/\s/g, '').replace(/^0/, '')}`;
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('phoneNumber', '==', phoneNumberFull));
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        Alert.alert('Error', 'No account found with this phone number. Please sign up first.');
         return;
       }
-
-      const userData = userSnap.data();
-
-      if (['resident', 'community_leader', 'emergency_responder'].includes(userData.role)) {
+      
+      const userDoc = querySnapshot.docs[0];
+      const userData = userDoc.data();
+      
+      // Navigate based on role
+      if (userData.role === 'resident') {
         router.replace('/(tabs)/communityfeed');
+      } else if (userData.role === 'community_leader') {
+        router.replace('/(tabs)/communityfeed');
+      } else if (userData.role === 'emergency_responder') {
+        router.replace('/(tabs)/emergencyrequest');
       } else {
-        Alert.alert('Error', 'Invalid user role');
+        router.replace('/(tabs)/communityfeed');
       }
-    } catch (error) {
-      Alert.alert('Verification Failed', error.message);
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
+
+    // Real mode
+    const credential = PhoneAuthProvider.credential(verificationId, otpString);
+    const userCredential = await signInWithCredential(auth, credential);
+    const user = userCredential.user;
+
+    const userRef = doc(db, 'users', user.uid);
+    const userSnap = await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+      router.replace('/(tabs)/communityfeed');
+      return;
+    }
+
+    const userData = userSnap.data();
+
+    if (userData.role === 'resident') {
+      router.replace('/(tabs)/incidentreport');
+    } else if (userData.role === 'community_leader') {
+      router.replace('/(tabs)/communityfeed');
+    } else if (userData.role === 'emergency_responder') {
+      router.replace('/(tabs)/emergencyresponder');
+    } else {
+      Alert.alert('Error', 'Invalid user role');
+    }
+  } catch (error) {
+    Alert.alert('Verification Failed', error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleBack = () => {
     setStep('phone');
     setOtp(Array(OTP_LENGTH).fill(''));
-    setConfirmation(null);
   };
 
   return (
@@ -146,11 +194,6 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={{ flex: 1, backgroundColor: colors.background }}
     >
-      {/*
-        FirebaseRecaptchaVerifierModal must be rendered in the tree.
-        attemptInvisibleVerification={true} tries invisible reCAPTCHA first
-        and only shows the modal if that fails.
-      */}
       <FirebaseRecaptchaVerifierModal
         ref={recaptchaVerifier}
         firebaseConfig={firebaseConfig}
@@ -160,30 +203,18 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}>
         {/* Header */}
         <View style={{ alignItems: 'center', marginBottom: 48 }}>
-          <View style={{
-            width: 80,
-            height: 80,
-            backgroundColor: colors.primary,
-            borderRadius: 40,
-            justifyContent: 'center',
-            alignItems: 'center',
-            marginBottom: 16
-          }}>
+          <View style={{ width: 80, height: 80, backgroundColor: colors.primary, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
             <Text style={{ fontSize: 40 }}>🤝</Text>
           </View>
           <Text style={{ fontSize: 28, fontWeight: 'bold', color: colors.primary }}>Welcome Back</Text>
           <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 8 }}>
-            {step === 'phone'
-              ? 'Sign in with your phone number'
-              : 'Enter the code sent to your phone'}
+            {step === 'phone' ? 'Sign in with your phone number' : 'Enter the code sent to your phone'}
           </Text>
         </View>
 
         {step === 'phone' ? (
           <>
-            <Text style={{ fontSize: 14, fontWeight: '500', color: colors.text, marginBottom: 8 }}>
-              Phone Number
-            </Text>
+            <Text style={{ fontSize: 14, fontWeight: '500', color: colors.text, marginBottom: 8 }}>Phone Number</Text>
 
             {/* Phone input row */}
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
@@ -203,9 +234,7 @@ export default function LoginScreen() {
                 }}
               >
                 <Text style={{ fontSize: 18 }}>{selectedCountry.flag}</Text>
-                <Text style={{ fontSize: 15, color: colors.text, fontWeight: '500' }}>
-                  {selectedCountry.code}
-                </Text>
+                <Text style={{ fontSize: 15, color: colors.text, fontWeight: '500' }}>{selectedCountry.code}</Text>
                 <Text style={{ fontSize: 11, color: colors.textLight }}>▼</Text>
               </TouchableOpacity>
 
@@ -244,17 +273,12 @@ export default function LoginScreen() {
                       padding: 14,
                       borderBottomWidth: 0.5,
                       borderBottomColor: colors.border,
-                      backgroundColor:
-                        selectedCountry.code === country.code
-                          ? colors.background
-                          : 'transparent',
+                      backgroundColor: selectedCountry.code === country.code ? colors.background : 'transparent',
                     }}
                   >
                     <Text style={{ fontSize: 20 }}>{country.flag}</Text>
                     <Text style={{ fontSize: 15, color: colors.text }}>{country.name}</Text>
-                    <Text style={{ fontSize: 15, color: colors.textLight, marginLeft: 'auto' }}>
-                      {country.code}
-                    </Text>
+                    <Text style={{ fontSize: 15, color: colors.textLight, marginLeft: 'auto' }}>{country.code}</Text>
                     {selectedCountry.code === country.code && (
                       <Text style={{ color: colors.accent, fontSize: 16 }}>✓</Text>
                     )}
@@ -269,13 +293,7 @@ export default function LoginScreen() {
           </>
         ) : (
           <>
-            <Text style={{
-              fontSize: 14,
-              fontWeight: '500',
-              color: colors.text,
-              marginBottom: 16,
-              textAlign: 'center'
-            }}>
+            <Text style={{ fontSize: 14, fontWeight: '500', color: colors.text, marginBottom: 16, textAlign: 'center' }}>
               Enter verification code
             </Text>
 
@@ -301,7 +319,7 @@ export default function LoginScreen() {
                   onChangeText={(val) => handleOtpChange(val, index)}
                   onKeyPress={(e) => handleOtpKeyPress(e, index)}
                   keyboardType="number-pad"
-                  maxLength={6}
+                  maxLength={6} // Allow paste of full code into first box
                   selectTextOnFocus
                   autoFocus={index === 0}
                 />

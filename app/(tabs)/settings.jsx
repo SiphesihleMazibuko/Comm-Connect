@@ -157,11 +157,11 @@ export default function SettingsScreen() {
 
         {/* Logout Button */}
         <TouchableOpacity
-          style={{ backgroundColor: colors.error, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 32, marginBottom: 40, flexDirection: 'row', justifyContent: 'center', gap: 10 }}
-          onPress={handleLogout}
+          style={{ backgroundColor: colors.error, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 10, flexDirection: 'row', justifyContent: 'center', gap: 10 }}
+          onPress={() => router.replace('/login')}
         >
           <Ionicons name="log-out" size={20} color="#fff" />
-          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Logout</Text>
+          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>LOGOUT (Temp)</Text>
         </TouchableOpacity>
       </View>
 

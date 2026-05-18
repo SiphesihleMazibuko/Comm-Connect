@@ -102,8 +102,8 @@ useEffect(() => {
       <Tabs.Screen
         name="emergencyrequest"
         options={{
-          title: 'Emergency',
-          href: isResident || isResponder ? undefined : null,
+          title: 'Emergencies',
+          href: role === 'emergency_responder' ? undefined : null,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="alert-circle" size={size} color={color} />
           ),
