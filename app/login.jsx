@@ -1,7 +1,7 @@
 import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { router } from 'expo-router';
 import { PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
-import {  doc, getDoc, collection, query, where, getDocs  } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -39,49 +39,29 @@ export default function LoginScreen() {
   const recaptchaVerifier = useRef(null);
   const otpRefs = useRef([]);
 
-// Mock mode flag
-const MOCK_MODE = true; // Set to false when you have real SMS API
+  const handleSendOTP = async () => {
+    const cleaned = phoneNumber.trim().replace(/\s/g, '');
+    if (!cleaned) {
+      Alert.alert('Error', 'Please enter your phone number');
+      return;
+    }
 
-const handleSendOTP = async () => {
-  const cleaned = phoneNumber.trim().replace(/\s/g, '');
-  if (!cleaned) {
-    Alert.alert('Error', 'Please enter your phone number');
-    return;
-  }
+    const local = cleaned.replace(/^0/, '');
+    const e164 = `${selectedCountry.code}${local}`;
 
-  if (MOCK_MODE) {
-    // Mock mode: just proceed to OTP step
     setLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setVerificationId('mock_' + Date.now());
+      const provider = new PhoneAuthProvider(auth);
+      const id = await provider.verifyPhoneNumber(e164, recaptchaVerifier.current);
+      setVerificationId(id);
       setStep('otp');
-      Alert.alert('OTP Sent (Mock)', 'Any 6-digit code works in test mode.\n\nTest code: 123456');
+      Alert.alert('OTP Sent', `A verification code was sent to ${e164}`);
     } catch (error) {
       Alert.alert('Error', error.message);
     } finally {
       setLoading(false);
     }
-    return;
-  }
-
-  // Real mode (when you have SMS API)
-  const local = cleaned.replace(/^0/, '');
-  const e164 = `${selectedCountry.code}${local}`;
-  
-  setLoading(true);
-  try {
-    const provider = new PhoneAuthProvider(auth);
-    const id = await provider.verifyPhoneNumber(e164, recaptchaVerifier.current);
-    setVerificationId(id);
-    setStep('otp');
-    Alert.alert('OTP Sent', `A verification code was sent to ${e164}`);
-  } catch (error) {
-    Alert.alert('Error', error.message);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleOtpChange = (value, index) => {
     if (!/^\d*$/.test(value)) return;
@@ -113,34 +93,29 @@ const handleSendOTP = async () => {
     }
   };
 
- const handleVerifyOTP = async () => {
-  const otpString = otp.join('');
-  if (otpString.length < OTP_LENGTH) {
-    Alert.alert('Error', 'Please enter the complete 6-digit OTP');
-    return;
-  }
+  const handleVerifyOTP = async () => {
+    const otpString = otp.join('');
+    if (otpString.length < OTP_LENGTH) {
+      Alert.alert('Error', 'Please enter the complete 6-digit OTP');
+      return;
+    }
 
-  setLoading(true);
-  try {
-    if (MOCK_MODE) {
-      // Mock mode: accept any OTP, just find user by phone number
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Find user by phone number in Firestore
-      const phoneNumberFull = `${selectedCountry.code}${phoneNumber.trim().replace(/\s/g, '').replace(/^0/, '')}`;
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('phoneNumber', '==', phoneNumberFull));
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.empty) {
-        Alert.alert('Error', 'No account found with this phone number. Please sign up first.');
+    setLoading(true);
+    try {
+      const credential = PhoneAuthProvider.credential(verificationId, otpString);
+      const userCredential = await signInWithCredential(auth, credential);
+      const user = userCredential.user;
+
+      const userRef = doc(db, 'users', user.uid);
+      const userSnap = await getDoc(userRef);
+
+      if (!userSnap.exists()) {
+        router.replace('/(tabs)/communityfeed');
         return;
       }
-      
-      const userDoc = querySnapshot.docs[0];
-      const userData = userDoc.data();
-      
-      // Navigate based on role
+
+      const userData = userSnap.data();
+
       if (userData.role === 'resident') {
         router.replace('/(tabs)/communityfeed');
       } else if (userData.role === 'community_leader') {
@@ -148,41 +123,14 @@ const handleSendOTP = async () => {
       } else if (userData.role === 'emergency_responder') {
         router.replace('/(tabs)/emergencyrequest');
       } else {
-        router.replace('/(tabs)/communityfeed');
+        Alert.alert('Error', 'Invalid user role');
       }
-      return;
+    } catch (error) {
+      Alert.alert('Verification Failed', error.message);
+    } finally {
+      setLoading(false);
     }
-
-    // Real mode
-    const credential = PhoneAuthProvider.credential(verificationId, otpString);
-    const userCredential = await signInWithCredential(auth, credential);
-    const user = userCredential.user;
-
-    const userRef = doc(db, 'users', user.uid);
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists()) {
-      router.replace('/(tabs)/communityfeed');
-      return;
-    }
-
-    const userData = userSnap.data();
-
-    if (userData.role === 'resident') {
-      router.replace('/(tabs)/incidentreport');
-    } else if (userData.role === 'community_leader') {
-      router.replace('/(tabs)/communityfeed');
-    } else if (userData.role === 'emergency_responder') {
-      router.replace('/(tabs)/emergencyresponder');
-    } else {
-      Alert.alert('Error', 'Invalid user role');
-    }
-  } catch (error) {
-    Alert.alert('Verification Failed', error.message);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleBack = () => {
     setStep('phone');
@@ -319,7 +267,7 @@ const handleSendOTP = async () => {
                   onChangeText={(val) => handleOtpChange(val, index)}
                   onKeyPress={(e) => handleOtpKeyPress(e, index)}
                   keyboardType="number-pad"
-                  maxLength={6} // Allow paste of full code into first box
+                  maxLength={6}
                   selectTextOnFocus
                   autoFocus={index === 0}
                 />

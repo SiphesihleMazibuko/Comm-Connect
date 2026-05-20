@@ -7,7 +7,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../../config/firebase';
 import colors from '../../Utils/colors';
 
-// Map the logged-in responder's serviceType to display config
 const SERVICE_CONFIG = {
   police:    { label: 'Police Unit',       icon: 'shield',  color: '#1D4ED8', bg: '#EFF6FF', gradient: ['#1D4ED8', '#1E40AF'] },
   ambulance: { label: 'Ambulance',         icon: 'medkit',  color: '#059669', bg: '#ECFDF5', gradient: ['#059669', '#047857'] },
@@ -38,14 +37,13 @@ export default function ResponderDashboardScreen() {
     loadResponderProfile();
   }, []);
 
-  // Once we know the serviceType, subscribe to dispatches for that service
+
   useEffect(() => {
     if (!responderServiceType) return;
     const unsubscribe = subscribeToDispatches(responderServiceType);
     return () => unsubscribe && unsubscribe();
   }, [responderServiceType]);
 
-  // Pulse animation for "pending" badge
   useEffect(() => {
     const hasPending = dispatches.some(d => d.status === 'pending');
     if (hasPending) {
@@ -58,22 +56,19 @@ export default function ResponderDashboardScreen() {
     } else {
       pulseAnim.setValue(1);
     }
-  }, [dispatches]);
+  }, [dispatches, pulseAnim]);
 
   const loadResponderProfile = async () => {
-    // Read the logged-in responder's serviceType from their user doc.
-    // Adjust the field name to match your Firestore schema.
     try {
       const { getDocs, collection: col, query: q, where: wh } = await import('firebase/firestore');
       const snap = await getDocs(q(col(db, 'users'), wh('__name__', '==', user.uid)));
       snap.forEach((d) => {
         const data = d.data();
-        // e.g. data.serviceType === 'police' | 'ambulance' | 'fire'
         setResponderServiceType(data.serviceType || 'police');
       });
     } catch (e) {
       console.error('Failed to load responder profile', e);
-      setResponderServiceType('police'); // fallback
+      setResponderServiceType('police'); 
     }
   };
 
@@ -81,8 +76,8 @@ export default function ResponderDashboardScreen() {
     const q = query(
       collection(db, 'emergency_dispatches'),
       where('serviceType', '==', serviceType),
-      where('status', '!=', 'resolved'),   // hide resolved from the live feed
-      orderBy('status'),                   // Firestore requires orderBy when using !=
+      where('status', '!=', 'resolved'),  
+      orderBy('status'),                   
       orderBy('dispatchedAt', 'desc')
     );
 
@@ -115,7 +110,6 @@ export default function ResponderDashboardScreen() {
         [`${newStatus}At`]: new Date().toISOString(),
         responderId: user.uid,
       });
-      // Optimistically update local state
       setDispatches(prev =>
         prev.map(d => d.id === dispatchId ? { ...d, status: newStatus, acknowledged: true } : d)
       );
@@ -226,7 +220,7 @@ export default function ResponderDashboardScreen() {
     );
   };
 
-  // ─── Loading ──────────────────────────────────────────────────────────────
+
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
@@ -236,7 +230,6 @@ export default function ResponderDashboardScreen() {
     );
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <Animated.View style={{ flex: 1, opacity: fadeAnim }}>

@@ -11,46 +11,43 @@ export default function TabLayout() {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-useEffect(() => {
-  const unsubscribe = onAuthStateChanged(auth, async (user) => {
-    if (!user) {
-      setLoading(false);
-      router.replace('/login');
-      return;
-    }
-
-    // Retry fetching role up to 5 times with a 1 second delay
-    // This handles the race condition where auth fires before
-    // the Firestore user document has finished writing
-    let fetchedRole = null;
-    let attempts = 0;
-
-    while (!fetchedRole && attempts < 5) {
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists() && userSnap.data().role) {
-          fetchedRole = userSnap.data().role;
-        } else {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      } catch (error) {
-        console.error('Error fetching user role:', error); 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setLoading(false);
+        router.replace('/login');
+        return;
       }
-    }
 
-    if (fetchedRole) {
-      setRole(fetchedRole);
-    } else {
-      router.replace('/login');
-    }
+      let fetchedRole = null;
+      let attempts = 0;
 
-    setLoading(false);
-  });
+      while (!fetchedRole && attempts < 5) {
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          const userSnap = await getDoc(userRef);
+          if (userSnap.exists() && userSnap.data().role) {
+            fetchedRole = userSnap.data().role;
+          } else {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (error) {
+          console.error('Error fetching user role:', error);
+        }
+        attempts++;
+      }
 
-  return () => unsubscribe();
-}, []);
+      if (fetchedRole) {
+        setRole(fetchedRole);
+      } else {
+        router.replace('/login');
+      }
 
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   if (loading || !role) {
     return (
@@ -77,17 +74,49 @@ useEffect(() => {
         },
       }}
     >
+      {/* ─── Shared: Community Feed ─────────────────────────────────────────────
+          Residents and Leaders land here as "Home".
+          Hidden from responders — they have their own home tab below.       */}
       <Tabs.Screen
         name="communityfeed"
         options={{
           title: 'Home',
-          href: isResident || isLeader || isResponder ? undefined : null,
+          href: isResident || isLeader ? undefined : null,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="newspaper" size={size} color={color} />
           ),
         }}
       />
 
+      {/* ─── Responder: Home (Emergency Responder Dashboard) ────────────────────
+          This is the "Home" tab exclusively for emergency_responder role.
+          File: app/(tabs)/emergencyresponder.jsx                             */}
+      <Tabs.Screen
+        name="emergencyResponderDashboard"
+        options={{
+          title: 'Home',
+          href: isResponder ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="medical" size={size} color={color} />
+          ),
+        }}
+      />
+
+      {/* ─── Responder: Emergencies (User requests needing response) ────────────
+          Shows incoming emergency requests for the responder to action.
+          File: app/(tabs)/emergencyrequest.jsx                               */}
+      <Tabs.Screen
+        name="emergencyrequest"
+        options={{
+          title: 'Emergencies',
+          href: isResponder ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="alert-circle" size={size} color={color} />
+          ),
+        }}
+      />
+
+      {/* ─── Resident: PinPoint ─────────────────────────────────────────────── */}
       <Tabs.Screen
         name="pinpoint"
         options={{
@@ -99,17 +128,7 @@ useEffect(() => {
         }}
       />
 
-      <Tabs.Screen
-        name="emergencyrequest"
-        options={{
-          title: 'Emergencies',
-          href: role === 'emergency_responder' ? undefined : null,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="alert-circle" size={size} color={color} />
-          ),
-        }}
-      />
-
+      {/* ─── Resident: Incident Report ──────────────────────────────────────── */}
       <Tabs.Screen
         name="incidentreport"
         options={{
@@ -121,6 +140,7 @@ useEffect(() => {
         }}
       />
 
+      {/* ─── Leader: Approvals ──────────────────────────────────────────────── */}
       <Tabs.Screen
         name="pendingreports"
         options={{
@@ -132,11 +152,12 @@ useEffect(() => {
         }}
       />
 
+      {/* ─── Shared: Settings (visible to all roles) ────────────────────────── */}
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
-          href: undefined, 
+          href: undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="settings" size={size} color={color} />
           ),

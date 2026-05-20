@@ -127,6 +127,7 @@ export default function PinPointScreen() {
       });
     } catch (error) {
       Alert.alert('Error', 'Failed to share address');
+      console.error('Share address error:', error);
     }
   };
 
@@ -161,7 +162,7 @@ export default function PinPointScreen() {
     }
 
     Alert.alert('Emergency', 'This will open emergency request screen');
-    router.push('../(tabs)/emergencyrequest');
+    router.push('..//screens/emergencyrequest');
   };
 
   return (
