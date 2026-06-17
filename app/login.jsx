@@ -1,7 +1,4 @@
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { router } from 'expo-router';
-import { PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,7 +11,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { auth, db, firebaseConfig } from '../config/firebase';
+import { getFriendlySupabaseError, getSupabaseClient, getUserProfile } from '../config/supabase';
 import colors from '../Utils/colors';
 
 const COUNTRY_CODES = [
@@ -36,7 +33,6 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState('phone');
 
-  const recaptchaVerifier = useRef(null);
   const otpRefs = useRef([]);
 
   const handleSendOTP = async () => {
@@ -51,13 +47,14 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const provider = new PhoneAuthProvider(auth);
-      const id = await provider.verifyPhoneNumber(e164, recaptchaVerifier.current);
-      setVerificationId(id);
+      const client = getSupabaseClient();
+      const { error } = await client.auth.signInWithOtp({ phone: e164 });
+      if (error) throw error;
+      setVerificationId(e164);
       setStep('otp');
       Alert.alert('OTP Sent', `A verification code was sent to ${e164}`);
     } catch (error) {
-      Alert.alert('Error', error.message);
+      Alert.alert('Error', getFriendlySupabaseError(error));
     } finally {
       setLoading(false);
     }
@@ -102,19 +99,22 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const credential = PhoneAuthProvider.credential(verificationId, otpString);
-      const userCredential = await signInWithCredential(auth, credential);
-      const user = userCredential.user;
+      const client = getSupabaseClient();
+      const { data, error } = await client.auth.verifyOtp({
+        phone: verificationId,
+        token: otpString,
+        type: 'sms',
+      });
 
-      const userRef = doc(db, 'users', user.uid);
-      const userSnap = await getDoc(userRef);
+      if (error) throw error;
 
-      if (!userSnap.exists()) {
+      const user = data.user;
+      const userData = user ? await getUserProfile(user.id) : null;
+
+      if (!userData) {
         router.replace('/(tabs)/communityfeed');
         return;
       }
-
-      const userData = userSnap.data();
 
       if (userData.role === 'resident') {
         router.replace('/(tabs)/communityfeed');
@@ -126,7 +126,7 @@ export default function LoginScreen() {
         Alert.alert('Error', 'Invalid user role');
       }
     } catch (error) {
-      Alert.alert('Verification Failed', error.message);
+      Alert.alert('Verification Failed', getFriendlySupabaseError(error));
     } finally {
       setLoading(false);
     }
@@ -142,12 +142,6 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={{ flex: 1, backgroundColor: colors.background }}
     >
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaVerifier}
-        firebaseConfig={firebaseConfig}
-        attemptInvisibleVerification={true}
-      />
-
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}>
         {/* Header */}
         <View style={{ alignItems: 'center', marginBottom: 48 }}>

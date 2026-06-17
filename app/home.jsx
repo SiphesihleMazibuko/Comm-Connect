@@ -1,27 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '../config/firebase';
+import { getCurrentUser, getUserProfile } from '../config/supabase';
 import colors from '../Utils/colors';
 import {SafeAreaView} from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
   const [userName, setUserName] = useState('');
   const [loading, setLoading] = useState(true);
-  const user = auth.currentUser;
 
   useEffect(() => {
     fetchUserData();
   }, []);
 
   const fetchUserData = async () => {
+    const user = await getCurrentUser();
     if (user) {
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      if (userDoc.exists()) {
-        setUserName(userDoc.data().firstName);
-      }
+      const profile = await getUserProfile(user.id);
+      setUserName(profile?.firstName || '');
     }
     setLoading(false);
   };

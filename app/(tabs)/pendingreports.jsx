@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { addDoc, collection, doc, getDocs, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Modal, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth, db } from '../../config/firebase';
+import { getCurrentUser, getRows, insertRow, updateRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
 const EMERGENCY_SERVICES = [
@@ -49,20 +48,23 @@ export default function PendingReportsScreen() {
   const [dispatching, setDispatching] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const user = auth.currentUser;
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    fetchPendingReports();
+    const load = async () => {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      await fetchPendingReports();
+    };
+
+    load();
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
   }, []);
 
   const fetchPendingReports = async () => {
     try {
-      const q = query(collection(db, 'reports'), where('status', '==', 'pending_review'));
-      const querySnapshot = await getDocs(q);
-      const reportsData = [];
-      querySnapshot.forEach((d) => {
-        reportsData.push({ id: d.id, ...d.data() });
+      const reportsData = await getRows('reports', {
+        eq: [{ column: 'status', value: 'pending_review' }],
       });
       setReports(reportsData);
     } catch (error) {
@@ -97,15 +99,15 @@ export default function PendingReportsScreen() {
       const chosenServices = EMERGENCY_SERVICES.filter((s) => selectedServices.includes(s.id));
 
       // 1. Update the report document
-      await updateDoc(doc(db, 'reports', reportToApprove.id), {
+      await updateRow('reports', reportToApprove.id, {
         status: 'approved',
         approvedAt: now,
-        approvedBy: user.uid,
+        approvedBy: user?.id,
         dispatchedServices: chosenServices.map((s) => s.serviceType),
       });
 
       // 2. Create a community feed post
-      await addDoc(collection(db, 'posts'), {
+      await insertRow('posts', {
         type:
           reportToApprove.reportType === 'crime'
             ? 'crime_alert'
@@ -114,7 +116,7 @@ export default function PendingReportsScreen() {
             : 'service_update',
         title: `${reportToApprove.reportType?.toUpperCase()} ALERT: Verified Incident`,
         description: reportToApprove.description,
-        createdBy: user.uid,
+        createdBy: user?.id,
         createdByName: 'Community Safety Team',
         createdAt: now,
         status: 'approved',
@@ -125,14 +127,14 @@ export default function PendingReportsScreen() {
       // 3. Create one dispatch record per selected service.
       //    Responder dashboards listen to `emergency_dispatches` filtered by their serviceType.
       for (const service of chosenServices) {
-        await addDoc(collection(db, 'emergency_dispatches'), {
+        await insertRow('emergency_dispatches', {
           reportId: reportToApprove.id,
           serviceType: service.serviceType,          // 'police' | 'ambulance' | 'fire'
           reportType: reportToApprove.reportType,
           description: reportToApprove.description,
           location: reportToApprove.location || null,
           dispatchedAt: now,
-          dispatchedBy: user.uid,
+          dispatchedBy: user?.id,
           status: 'pending',                         // responder dashboard can update to 'en_route' / 'resolved'
           acknowledged: false,
         });
@@ -158,7 +160,7 @@ export default function PendingReportsScreen() {
 
   const handleReject = async (reportId) => {
     try {
-      await updateDoc(doc(db, 'reports', reportId), { status: 'rejected' });
+      await updateRow('reports', reportId, { status: 'rejected' });
       setReports((prev) => prev.filter((r) => r.id !== reportId));
       setDetailModalVisible(false);
       alert('Report rejected');

@@ -1,12 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { addDoc, collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, Share, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth, db } from '../../config/firebase';
+import { deleteRow, getCurrentUser, getRows, insertRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
 export default function PinPointScreen() {
@@ -20,10 +19,16 @@ export default function PinPointScreen() {
   const [selectedAddress, setSelectedAddress] = useState(null);
 
   const router = useRouter();
-  const user = auth.currentUser;
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    loadSavedAddresses();
+    const load = async () => {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      await loadSavedAddresses(currentUser);
+    };
+
+    load();
   }, []);
 
   const getCurrentLocation = async () => {
@@ -78,8 +83,8 @@ export default function PinPointScreen() {
     setSaving(true);
 
     try {
-      await addDoc(collection(db, 'pinpoints'), {
-        userId: user.uid,
+      await insertRow('pinpoints', {
+        userId: user.id,
         label: addressLabel,
         digitalAddress,
         latitude: location.latitude,
@@ -93,7 +98,7 @@ export default function PinPointScreen() {
       setAddressLabel('');
       setLocation(null);
       setDigitalAddress('');
-      loadSavedAddresses();
+      loadSavedAddresses(user);
     } catch (error) {
       Alert.alert('Error', 'Failed to save address');
       console.error('Save address error:', error);
@@ -102,16 +107,12 @@ export default function PinPointScreen() {
     }
   };
 
-  const loadSavedAddresses = async () => {
-    if (!user) return;
+  const loadSavedAddresses = async (currentUser = user) => {
+    if (!currentUser) return;
 
     try {
-      const q = query(collection(db, 'pinpoints'), where('userId', '==', user.uid));
-      const querySnapshot = await getDocs(q);
-
-      const addresses = [];
-      querySnapshot.forEach((doc) => {
-        addresses.push({ id: doc.id, ...doc.data() });
+      const addresses = await getRows('pinpoints', {
+        eq: [{ column: 'userId', value: currentUser.id }],
       });
 
       setSavedAddresses(addresses);
@@ -142,8 +143,8 @@ export default function PinPointScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteDoc(doc(db, 'pinpoints', addressId));
-              loadSavedAddresses();
+              await deleteRow('pinpoints', addressId);
+              loadSavedAddresses(user);
               Alert.alert('Success', 'Address deleted');
             } catch (error) {
               Alert.alert('Error', 'Failed to delete address');

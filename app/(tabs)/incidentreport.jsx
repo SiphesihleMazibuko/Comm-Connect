@@ -1,14 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import {
-  addDoc,
-  collection,
-  getDocs,
-  query,
-  where,
-  orderBy
-} from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,7 +14,7 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth, db } from '../../config/firebase';
+import { getCurrentUser, getRows, insertRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
 export default function IncidentReportScreen() {
@@ -30,7 +22,7 @@ export default function IncidentReportScreen() {
   const CLOUDINARY_UPLOAD_PRESET = 'Comm-connect';
 
   const router = useRouter();
-  const user = auth.currentUser;
+  const [user, setUser] = useState(null);
 
   const [reportType, setReportType] = useState('crime');
   const [description, setDescription] = useState('');
@@ -49,26 +41,24 @@ export default function IncidentReportScreen() {
   const [showReportHistory, setShowReportHistory] = useState(false);
 
   useEffect(() => {
-    loadUserPinpoints();
-    loadUserReports();
+    const load = async () => {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      await loadUserPinpoints(currentUser);
+      await loadUserReports(currentUser);
+    };
+
+    load();
   }, []);
 
-  const loadUserPinpoints = async () => {
-    if (!user) return;
+  const loadUserPinpoints = async (currentUser = user) => {
+    if (!currentUser) return;
 
     setLoadingPinpoints(true);
 
     try {
-      const q = query(
-        collection(db, 'pinpoints'),
-        where('userId', '==', user.uid)
-      );
-
-      const querySnapshot = await getDocs(q);
-      const pins = [];
-
-      querySnapshot.forEach((doc) => {
-        pins.push({ id: doc.id, ...doc.data() });
+      const pins = await getRows('pinpoints', {
+        eq: [{ column: 'userId', value: currentUser.id }],
       });
 
       setSavedPinpoints(pins);
@@ -83,23 +73,15 @@ export default function IncidentReportScreen() {
     }
   };
 
-  const loadUserReports = async () => {
-    if (!user) return;
+  const loadUserReports = async (currentUser = user) => {
+    if (!currentUser) return;
 
     setLoadingReports(true);
 
     try {
-      const q = query(
-        collection(db, 'reports'),
-        where('submittedBy', '==', user.uid),
-        orderBy('createdAt', 'desc')
-      );
-
-      const querySnapshot = await getDocs(q);
-      const reports = [];
-
-      querySnapshot.forEach((doc) => {
-        reports.push({ id: doc.id, ...doc.data() });
+      const reports = await getRows('reports', {
+        eq: [{ column: 'submittedBy', value: currentUser.id }],
+        order: [{ column: 'createdAt', ascending: false }],
       });
 
       setUserReports(reports);
@@ -195,7 +177,7 @@ export default function IncidentReportScreen() {
     console.log('description:', description);
     console.log('selectedPinpoint:', selectedPinpoint);
     console.log('images:', images);
-    console.log('user:', user?.uid);
+    console.log('user:', user?.id);
 
     if (!user) {
       Alert.alert('Error', 'You must be logged in to submit a report.');
@@ -239,9 +221,9 @@ export default function IncidentReportScreen() {
         imageUrls = await uploadImages();
       }
 
-      await addDoc(collection(db, 'reports'), {
-        userId: anonymous ? null : user.uid,
-        submittedBy: user.uid,
+      await insertRow('reports', {
+        userId: anonymous ? null : user.id,
+        submittedBy: user.id,
         reportType,
         description: description.trim(),
         photoUrls: imageUrls,
@@ -262,7 +244,7 @@ export default function IncidentReportScreen() {
       setAnonymous(false);
       setReportType('crime');
 
-      await loadUserReports();
+      await loadUserReports(user);
 
       Alert.alert(
         'Report Submitted',

@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import colors from '../../Utils/colors';
-import { auth, db } from "../../config/firebase";
+import { deleteRow, getCurrentUser, getRows, getUserProfile, insertRow, subscribeToTable } from '../../config/supabase';
 
 export default function CommunityFeedScreen() {
   const [posts, setPosts] = useState([]);
@@ -15,41 +14,44 @@ export default function CommunityFeedScreen() {
   const [newPost, setNewPost] = useState({ title: '', description: '', type: 'crime_alert' });
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [user, setUser] = useState(null);
 
-  const user = auth.currentUser;
   const isLeader = userRole === 'community_leader' || userRole === 'leader';
 
   useEffect(() => {
-    fetchUserRole();
-    const unsubscribe = subscribeToFeed();
+    let unsubscribe;
+
+    const load = async () => {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      await fetchUserRole(currentUser);
+      await loadFeed();
+      unsubscribe = subscribeToFeed();
+    };
+
+    load();
     return () => unsubscribe && unsubscribe();
   }, []);
 
-  const fetchUserRole = async () => {
-    if (user) {
-      const userDoc = await getDocs(query(collection(db, 'users'), where('__name__', '==', user.uid)));
-      userDoc.forEach((doc) => {
-        setUserRole(doc.data().role);
-      });
+  const fetchUserRole = async (currentUser = user) => {
+    if (currentUser) {
+      const profile = await getUserProfile(currentUser.id);
+      setUserRole(profile?.role || 'resident');
     }
   };
 
-  const subscribeToFeed = () => {
-    const q = query(collection(db, 'posts'), orderBy('priority', 'desc'), orderBy('createdAt', 'desc'));
-
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const postsData = [];
-      querySnapshot.forEach((doc) => {
-        postsData.push({ id: doc.id, ...doc.data() });
-      });
-
-      // Pin crime_alert posts to the top, preserve priority/date order within each group
-      const crimeAlerts = postsData.filter(p => p.type === 'crime_alert');
-      const others = postsData.filter(p => p.type !== 'crime_alert');
-      setPosts([...crimeAlerts, ...others]);
+  const loadFeed = async () => {
+    const postsData = await getRows('posts', {
+      order: [{ column: 'createdAt', ascending: false }],
     });
 
-    return unsubscribe;
+    const crimeAlerts = postsData.filter(p => p.type === 'crime_alert');
+    const others = postsData.filter(p => p.type !== 'crime_alert');
+    setPosts([...crimeAlerts, ...others]);
+  };
+
+  const subscribeToFeed = () => {
+    return subscribeToTable('posts', loadFeed);
   };
 
   const getCategoryIcon = (type) => {
@@ -91,7 +93,7 @@ export default function CommunityFeedScreen() {
           onPress: async () => {
             setDeletingId(post.id);
             try {
-              await deleteDoc(doc(db, 'posts', post.id));
+              await deleteRow('posts', post.id);
             } catch (error) {
               Alert.alert('Error', 'Failed to delete post. Please try again.');
               console.error('Error deleting post:', error);
@@ -105,6 +107,11 @@ export default function CommunityFeedScreen() {
   };
 
   const handleCreatePost = async () => {
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to create a post');
+      return;
+    }
+
     if (!newPost.title || !newPost.description) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -112,12 +119,12 @@ export default function CommunityFeedScreen() {
 
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'posts'), {
+      await insertRow('posts', {
         type: newPost.type,
         title: newPost.title,
         description: newPost.description,
-        createdBy: user.uid,
-        createdByName: user.displayName || 'Community Leader',
+        createdBy: user.id,
+        createdByName: user.user_metadata?.full_name || 'Community Leader',
         createdAt: new Date().toISOString(),
         status: 'approved',
         priority: newPost.type === 'crime_alert' ? 'high' : 'normal',
@@ -221,7 +228,7 @@ export default function CommunityFeedScreen() {
         {/* Posts List */}
         <ScrollView
           style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => subscribeToFeed()} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadFeed} />}
         >
           {filteredPosts.length === 0 ? (
             <View style={{ padding: 40, alignItems: 'center' }}>

@@ -1,7 +1,4 @@
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { router } from 'expo-router';
-import { PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
 import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,7 +11,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { auth, db, firebaseConfig } from '../config/firebase';
+import { getFriendlySupabaseError, getSupabaseClient, upsertRow } from '../config/supabase';
 import colors from '../Utils/colors';
 
 const OTP_LENGTH = 6;
@@ -49,7 +46,6 @@ export default function SignupScreen() {
   const [verificationId, setVerificationId] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const recaptchaVerifier = useRef(null);
   const otpRefs = useRef([]);
 
   const roles = [
@@ -93,19 +89,18 @@ const handleSendOTP = async () => {
     return;
   }
 
-  // MOCK MODE: Generate a fake verification ID
   setLoading(true);
   try {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Create a mock verification ID
-    const mockVerificationId = 'mock_' + Date.now();
-    setVerificationId(mockVerificationId);
+    const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
+    const client = getSupabaseClient();
+    const { error } = await client.auth.signInWithOtp({ phone: fullPhoneNumber });
+    if (error) throw error;
+
+    setVerificationId(fullPhoneNumber);
     setStep('otp');
-    Alert.alert('OTP Sent (MOCK)', `Any 6-digit code will work for testing.\n\nTest code: 123456`);
+    Alert.alert('OTP Sent', `A verification code was sent to ${fullPhoneNumber}`);
   } catch (error) {
-    Alert.alert('Error', error.message);
+    Alert.alert('Error', getFriendlySupabaseError(error));
   } finally {
     setLoading(false);
   }
@@ -152,25 +147,23 @@ const handleVerifyAndCreate = async () => {
 
   setLoading(true);
   try {
-    // MOCK MODE: Accept ANY 6-digit code (no real verification)
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Create a mock user ID
-    const mockUserId = 'mock_user_' + Date.now();
-    
-    // Create mock user object
-    const mockUser = {
-      uid: mockUserId,
-      phoneNumber: `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`
-    };
+    const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
+    const client = getSupabaseClient();
+    const { data, error } = await client.auth.verifyOtp({
+      phone: verificationId || fullPhoneNumber,
+      token: otpString,
+      type: 'sms',
+    });
 
-    // Write Firestore doc with mock user ID
-    await setDoc(doc(db, 'users', mockUserId), {
+    if (error) throw error;
+    if (!data.user) throw new Error('Could not create Supabase user.');
+
+    await upsertRow('users', {
+      id: data.user.id,
       firstName,
       lastName,
       email,
-      phoneNumber: `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`,
+      phoneNumber: fullPhoneNumber,
       idNumber,
       location,
       role: selectedRole,
@@ -186,13 +179,12 @@ const handleVerifyAndCreate = async () => {
         canSendCommunityAlerts: selectedRole === 'community_leader'
       },
       createdAt: new Date().toISOString(),
-      isMockUser: true  // Flag to identify mock users
+      isMockUser: false
     });
 
-    // Show success and navigate to LOGIN
     Alert.alert(
-      'Account Created Successfully! (Mock Mode)',
-      'Your account has been created. Please login to continue.\n\nNote: This is a test account.',
+      'Account Created Successfully!',
+      'Your account has been created. Please login to continue.',
       [
         {
           text: 'Go to Login',
@@ -203,7 +195,7 @@ const handleVerifyAndCreate = async () => {
 
   } catch (error) {
     console.error('Signup error:', error);
-    Alert.alert('Signup Failed', error.message);
+    Alert.alert('Signup Failed', getFriendlySupabaseError(error));
   } finally {
     setLoading(false);
   }
@@ -215,12 +207,6 @@ const handleVerifyAndCreate = async () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={{ flex: 1, backgroundColor: colors.background }}
     >
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaVerifier}
-        firebaseConfig={firebaseConfig}
-        attemptInvisibleVerification={true}
-      />
-
       <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 60, paddingBottom: 40 }}>
 
         {/* Header */}
@@ -374,7 +360,7 @@ const handleVerifyAndCreate = async () => {
                 )}
 
                 <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 16 }}>
-                  Don't include the country code or leading zero
+                  Don&apos;t include the country code or leading zero
                 </Text>
 
                 <View style={{ marginBottom: 12 }}>

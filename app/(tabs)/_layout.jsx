@@ -1,10 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs, router } from 'expo-router';
-import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { auth, db } from '../../config/firebase';
+import { getSupabaseClient, getUserProfile } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
 export default function TabLayout() {
@@ -12,7 +10,7 @@ export default function TabLayout() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const loadUserRole = async (user) => {
       if (!user) {
         setLoading(false);
         router.replace('/login');
@@ -24,10 +22,9 @@ export default function TabLayout() {
 
       while (!fetchedRole && attempts < 5) {
         try {
-          const userRef = doc(db, 'users', user.uid);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists() && userSnap.data().role) {
-            fetchedRole = userSnap.data().role;
+          const profile = await getUserProfile(user.id);
+          if (profile?.role) {
+            fetchedRole = profile.role;
           } else {
             await new Promise(resolve => setTimeout(resolve, 1000));
           }
@@ -44,9 +41,17 @@ export default function TabLayout() {
       }
 
       setLoading(false);
+    };
+
+    const client = getSupabaseClient();
+
+    client.auth.getUser().then(({ data }) => loadUserRole(data.user));
+
+    const { data: authListener } = client.auth.onAuthStateChange((_event, session) => {
+      loadUserRole(session?.user || null);
     });
 
-    return () => unsubscribe();
+    return () => authListener.subscription.unsubscribe();
   }, []);
 
   if (loading || !role) {

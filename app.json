@@ -23,17 +23,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png",
-      "config": {
-        "firebase": {
-          "apiKey": "AIzaSyBg90DZwgNvNuBkJ6vW0R_IxwtJycDxgQw",
-          "authDomain": "comm-connect-d2968.firebaseapp.com",
-          "projectId": "comm-connect-d2968",
-          "storageBucket": "comm-connect-d2968.firebasestorage.app",
-          "messagingSenderId": "586488282093",
-          "appId": "1:586488282093:web:e117e45f8562745fa585e4"
-        }
-      }
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "expo-router",

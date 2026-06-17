@@ -1,16 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { collection, doc, onSnapshot, query, updateDoc, orderBy, serverTimestamp } from 'firebase/firestore';
 import { useEffect, useState, useRef } from 'react';
 import { ActivityIndicator, Alert, Animated, Modal, ScrollView, Text, TextInput, TouchableOpacity, View, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth, db } from '../../config/firebase';
+import { getCurrentUser, getRows, subscribeToTable, updateRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
 export default function EmergencyResponderScreen() {
   const router = useRouter();
-  const user = auth.currentUser;
+  const [user, setUser] = useState(null);
   
   const [activeTab, setActiveTab] = useState('pending');
   const [emergencies, setEmergencies] = useState({ pending: [], ongoing: [], completed: [] });
@@ -25,7 +24,16 @@ export default function EmergencyResponderScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    const unsubscribe = subscribeToEmergencies();
+    let unsubscribe;
+
+    const load = async () => {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      await loadEmergencies();
+      unsubscribe = subscribeToEmergencies();
+    };
+
+    load();
     
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
@@ -43,31 +51,33 @@ export default function EmergencyResponderScreen() {
   }, []);
 
   const subscribeToEmergencies = () => {
-    const q = query(collection(db, 'emergencyRequests'), orderBy('createdAt', 'desc'));
-    
-    return onSnapshot(q, (snapshot) => {
-      const pending = [], ongoing = [], completed = [];
-      
-      snapshot.forEach((doc) => {
-        const data = { id: doc.id, ...doc.data() };
-        if (data.status === 'completed') completed.push(data);
-        else if (data.status === 'in_progress') ongoing.push(data);
-        else if (data.status === 'pending') pending.push(data);
-      });
-      
-      setEmergencies({ pending, ongoing, completed });
-      
-      // Update selectedEmergency if it exists in the new data
-      if (selectedEmergency) {
-        const allEmergencies = [...pending, ...ongoing, ...completed];
-        const updatedEmergency = allEmergencies.find(e => e.id === selectedEmergency.id);
-        if (updatedEmergency && updatedEmergency.status !== selectedEmergency.status) {
-          setSelectedEmergency(updatedEmergency);
-        }
-      }
-      
-      setLoading(false);
+    return subscribeToTable('emergencyRequests', loadEmergencies);
+  };
+
+  const loadEmergencies = async () => {
+    const rows = await getRows('emergencyRequests', {
+      order: [{ column: 'createdAt', ascending: false }],
     });
+
+    const pending = [], ongoing = [], completed = [];
+
+    rows.forEach((data) => {
+      if (data.status === 'completed') completed.push(data);
+      else if (data.status === 'in_progress') ongoing.push(data);
+      else if (data.status === 'pending') pending.push(data);
+    });
+
+    setEmergencies({ pending, ongoing, completed });
+
+    if (selectedEmergency) {
+      const allEmergencies = [...pending, ...ongoing, ...completed];
+      const updatedEmergency = allEmergencies.find(e => e.id === selectedEmergency.id);
+      if (updatedEmergency && updatedEmergency.status !== selectedEmergency.status) {
+        setSelectedEmergency(updatedEmergency);
+      }
+    }
+
+    setLoading(false);
   };
 
   const acknowledgeEmergency = async (emergency) => {
@@ -75,13 +85,13 @@ export default function EmergencyResponderScreen() {
     
     try {
       setUpdating(true);
-      console.log('🔵 Updating Firestore...');
-      
-      await updateDoc(doc(db, 'emergencyRequests', emergency.id), {
+      console.log('Updating Supabase...');
+
+      await updateRow('emergencyRequests', emergency.id, {
         status: 'in_progress',
-        responderId: user.uid,
-        responderName: user.displayName || 'Responder',
-        respondedAt: serverTimestamp()
+        responderId: user?.id,
+        responderName: user?.user_metadata?.full_name || 'Responder',
+        respondedAt: new Date().toISOString()
       });
       
       console.log('🔵 Update successful!');
@@ -99,9 +109,9 @@ export default function EmergencyResponderScreen() {
   const completeEmergency = async (emergency) => {
     try {
       setUpdating(true);
-      await updateDoc(doc(db, 'emergencyRequests', emergency.id), {
+      await updateRow('emergencyRequests', emergency.id, {
         status: 'completed',
-        completedAt: serverTimestamp(),
+        completedAt: new Date().toISOString(),
         responderNotes: responderNotes || 'Emergency resolved'
       });
       Alert.alert('Success', 'Emergency completed');

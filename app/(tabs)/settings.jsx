@@ -1,9 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { signOut } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '../../config/firebase';
+import { getCurrentUser, getSupabaseClient, getUserProfile, updateRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
 import { useRouter } from 'expo-router';
 
@@ -14,30 +12,38 @@ export default function SettingsScreen() {
   const [language, setLanguage] = useState('en');
   const [userData, setUserData] = useState(null);
   const [showLanguageModal, setShowLanguageModal] = useState(false);
-  const user = auth.currentUser;
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     loadUserSettings();
   }, []);
 
   const loadUserSettings = async () => {
-    if (user) {
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      if (userDoc.exists()) {
-        const data = userDoc.data();
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+
+      if (currentUser) {
+        const data = await getUserProfile(currentUser.id);
         setUserData(data);
-        setNotificationsEnabled(data.permissions?.notificationsEnabled ?? true);
-        setAnonymousDefault(data.permissions?.anonymousReportsDefault ?? false);
-        setLanguage(data.language || 'en');
+        setNotificationsEnabled(data?.permissions?.notificationsEnabled ?? true);
+        setAnonymousDefault(data?.permissions?.anonymousReportsDefault ?? false);
+        setLanguage(data?.language || 'en');
       }
-    }
   };
 
   const updateSetting = async (key, value) => {
     if (user) {
-      await updateDoc(doc(db, 'users', user.uid), {
-        [key]: value
-      });
+      const updates = key.startsWith('permissions.')
+        ? {
+            permissions: {
+              ...(userData?.permissions || {}),
+              [key.replace('permissions.', '')]: value,
+            },
+          }
+        : { [key]: value };
+
+      await updateRow('users', user.id, updates);
+      setUserData((previous) => ({ ...(previous || {}), ...updates }));
     }
   };
 
@@ -68,7 +74,8 @@ export default function SettingsScreen() {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
-            await signOut(auth);
+            const client = getSupabaseClient();
+            await client.auth.signOut();
             router.replace('/login');
           }
         }
@@ -158,10 +165,10 @@ export default function SettingsScreen() {
         {/* Logout Button */}
         <TouchableOpacity
           style={{ backgroundColor: colors.error, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 10, flexDirection: 'row', justifyContent: 'center', gap: 10 }}
-          onPress={() => router.replace('/login')}
+          onPress={handleLogout}
         >
           <Ionicons name="log-out" size={20} color="#fff" />
-          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>LOGOUT (Temp)</Text>
+          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>LOGOUT</Text>
         </TouchableOpacity>
       </View>
 

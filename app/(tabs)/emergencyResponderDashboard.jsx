@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { collection, onSnapshot, orderBy, query, updateDoc, doc, where } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Modal, ScrollView, Text, TouchableOpacity, View, Vibration } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth, db } from '../../config/firebase';
+import { getCurrentUser, getRows, getUserProfile, subscribeToTable, updateRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
 const SERVICE_CONFIG = {
@@ -30,7 +29,7 @@ export default function ResponderDashboardScreen() {
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const user = auth.currentUser;
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
@@ -60,12 +59,10 @@ export default function ResponderDashboardScreen() {
 
   const loadResponderProfile = async () => {
     try {
-      const { getDocs, collection: col, query: q, where: wh } = await import('firebase/firestore');
-      const snap = await getDocs(q(col(db, 'users'), wh('__name__', '==', user.uid)));
-      snap.forEach((d) => {
-        const data = d.data();
-        setResponderServiceType(data.serviceType || 'police');
-      });
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      const data = currentUser ? await getUserProfile(currentUser.id) : null;
+      setResponderServiceType(data?.serviceType || data?.responderType || 'police');
     } catch (e) {
       console.error('Failed to load responder profile', e);
       setResponderServiceType('police'); 
@@ -73,42 +70,42 @@ export default function ResponderDashboardScreen() {
   };
 
   const subscribeToDispatches = (serviceType) => {
-    const q = query(
-      collection(db, 'emergency_dispatches'),
-      where('serviceType', '==', serviceType),
-      where('status', '!=', 'resolved'),  
-      orderBy('status'),                   
-      orderBy('dispatchedAt', 'desc')
-    );
+    const loadDispatches = async () => {
+      try {
+        const data = await getRows('emergency_dispatches', {
+          eq: [{ column: 'serviceType', value: serviceType }],
+          neq: [{ column: 'status', value: 'resolved' }],
+          order: [
+            { column: 'status', ascending: true },
+            { column: 'dispatchedAt', ascending: false },
+          ],
+        });
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = [];
-      snapshot.forEach((d) => data.push({ id: d.id, ...d.data() }));
+        const newPending = data.filter(d => d.status === 'pending' && !d.acknowledged);
+        if (newPending.length > 0) {
+          Vibration.vibrate([0, 400, 200, 400]);
+        }
 
-      // Vibrate + flag new pending dispatches
-      const newPending = data.filter(d => d.status === 'pending' && !d.acknowledged);
-      if (newPending.length > 0) {
-        Vibration.vibrate([0, 400, 200, 400]);
-      }
-
-      setDispatches(data);
-      setLoading(false);
-    }, (err) => {
+        setDispatches(data);
+      } catch (err) {
       console.error('Dispatch listener error:', err);
+      } finally {
       setLoading(false);
-    });
+      }
+    };
 
-    return unsubscribe;
+    loadDispatches();
+    return subscribeToTable('emergency_dispatches', loadDispatches);
   };
 
   const updateDispatchStatus = async (dispatchId, newStatus) => {
     setUpdatingId(dispatchId);
     try {
-      await updateDoc(doc(db, 'emergency_dispatches', dispatchId), {
+      await updateRow('emergency_dispatches', dispatchId, {
         status: newStatus,
         acknowledged: true,
         [`${newStatus}At`]: new Date().toISOString(),
-        responderId: user.uid,
+        responderId: user?.id,
       });
       setDispatches(prev =>
         prev.map(d => d.id === dispatchId ? { ...d, status: newStatus, acknowledged: true } : d)
