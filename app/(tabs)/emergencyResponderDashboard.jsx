@@ -123,7 +123,6 @@ export default function ResponderDashboardScreen() {
   const serviceConfig = SERVICE_CONFIG[responderServiceType] || SERVICE_CONFIG.police;
   const pendingCount = dispatches.filter(d => d.status === 'pending').length;
 
-  // ─── Status action button helper ─────────────────────────────────────────
   const nextStatusAction = (currentStatus) => {
     switch (currentStatus) {
       case 'pending':  return { label: 'Mark En Route', next: 'en_route',  color: '#3B82F6' };
@@ -133,7 +132,6 @@ export default function ResponderDashboardScreen() {
     }
   };
 
-  // ─── Dispatch card ────────────────────────────────────────────────────────
   const DispatchCard = ({ dispatch }) => {
     const statusCfg = STATUS_CONFIG[dispatch.status] || STATUS_CONFIG.pending;
     const isNew = dispatch.status === 'pending' && !dispatch.acknowledged;
@@ -158,10 +156,8 @@ export default function ResponderDashboardScreen() {
           shadowOffset: { width: 0, height: 2 },
         }}
       >
-        {/* Top row */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            {/* Pulsing dot for new alerts */}
             {isNew && (
               <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
                 <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#EF4444' }} />
@@ -172,11 +168,20 @@ export default function ResponderDashboardScreen() {
             </Text>
           </View>
 
-          {/* Status badge */}
           <View style={{ backgroundColor: statusCfg.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
             <Text style={{ fontSize: 11, fontWeight: 'bold', color: statusCfg.color }}>{statusCfg.label}</Text>
           </View>
         </View>
+
+        {/* ✅ ADD WARD ID DISPLAY */}
+        {dispatch.ward_id && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+            <Ionicons name="location" size={12} color={colors.accent} />
+            <Text style={{ fontSize: 11, color: colors.accent, fontWeight: '600' }}>
+              Ward {dispatch.ward_id}
+            </Text>
+          </View>
+        )}
 
         <Text style={{ fontSize: 13, color: colors.textLight, lineHeight: 18, marginBottom: 12 }} numberOfLines={2}>
           {dispatch.description}
@@ -187,7 +192,6 @@ export default function ResponderDashboardScreen() {
             {dispatch.dispatchedAt ? new Date(dispatch.dispatchedAt).toLocaleTimeString() : 'Just now'}
           </Text>
 
-          {/* Inline next-step button */}
           {action && (
             <TouchableOpacity
               onPress={() => updateDispatchStatus(dispatch.id, action.next)}
@@ -232,7 +236,6 @@ export default function ResponderDashboardScreen() {
       <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
         <ScrollView showsVerticalScrollIndicator={false}>
 
-          {/* HEADER */}
           <LinearGradient
             colors={serviceConfig.gradient}
             start={{ x: 0, y: 0 }}
@@ -265,7 +268,6 @@ export default function ResponderDashboardScreen() {
             </View>
           </LinearGradient>
 
-          {/* DISPATCH LIST */}
           <View style={{ padding: 16, paddingTop: 20 }}>
             {dispatches.length === 0 ? (
               <View style={{ alignItems: 'center', paddingVertical: 60 }}>
@@ -277,7 +279,6 @@ export default function ResponderDashboardScreen() {
               </View>
             ) : (
               <>
-                {/* Section header */}
                 <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textLight, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>
                   Active Dispatches
                 </Text>
@@ -290,12 +291,10 @@ export default function ResponderDashboardScreen() {
         </ScrollView>
       </Animated.View>
 
-      {/* ── DETAIL MODAL ─────────────────────────────────────────────────── */}
       <Modal visible={detailVisible} animationType="slide" transparent={true}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
           <View style={{ backgroundColor: colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 36, maxHeight: '85%' }}>
 
-            {/* Handle */}
             <View style={{ width: 40, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: 20 }} />
 
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -307,7 +306,6 @@ export default function ResponderDashboardScreen() {
 
             {selectedDispatch && (
               <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Status badge */}
                 {(() => {
                   const sCfg = STATUS_CONFIG[selectedDispatch.status] || STATUS_CONFIG.pending;
                   return (
@@ -322,6 +320,16 @@ export default function ResponderDashboardScreen() {
                   );
                 })()}
 
+                {/* ✅ ADD WARD ID TO MODAL */}
+                {selectedDispatch.ward_id && (
+                  <View style={{ marginBottom: 18 }}>
+                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.textLight, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>
+                      Ward
+                    </Text>
+                    <Text style={{ fontSize: 15, color: colors.text }}>Ward {selectedDispatch.ward_id}</Text>
+                  </View>
+                )}
+
                 <DetailRow label="Incident Type" value={selectedDispatch.reportType?.toUpperCase() || '—'} />
                 <DetailRow label="Description" value={selectedDispatch.description || '—'} />
                 <DetailRow
@@ -333,7 +341,6 @@ export default function ResponderDashboardScreen() {
                   }
                 />
 
-                {/* Status progression buttons */}
                 {(() => {
                   const action = nextStatusAction(selectedDispatch.status);
                   const isUpdating = updatingId === selectedDispatch.id;
@@ -378,7 +385,6 @@ export default function ResponderDashboardScreen() {
   );
 }
 
-// Small helper component for labelled detail rows
 function DetailRow({ label, value }) {
   return (
     <View style={{ marginBottom: 18 }}>
@@ -390,7 +396,6 @@ function DetailRow({ label, value }) {
   );
 }
 
-// Re-export the nextStatusAction so it can be reused in DispatchCard (defined outside component scope above)
 function nextStatusAction(currentStatus) {
   switch (currentStatus) {
     case 'pending':  return { label: 'Mark En Route', next: 'en_route',  color: '#3B82F6' };

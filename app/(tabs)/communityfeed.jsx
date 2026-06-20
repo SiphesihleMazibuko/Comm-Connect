@@ -15,6 +15,7 @@ export default function CommunityFeedScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
 
   const isLeader = userRole === 'community_leader' || userRole === 'leader';
 
@@ -24,7 +25,11 @@ export default function CommunityFeedScreen() {
     const load = async () => {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
-      await fetchUserRole(currentUser);
+      if (currentUser) {
+        const profile = await getUserProfile(currentUser.id);
+        setUserProfile(profile);
+        setUserRole(profile?.role || 'resident');
+      }
       await loadFeed();
       unsubscribe = subscribeToFeed();
     };
@@ -33,21 +38,29 @@ export default function CommunityFeedScreen() {
     return () => unsubscribe && unsubscribe();
   }, []);
 
-  const fetchUserRole = async (currentUser = user) => {
-    if (currentUser) {
-      const profile = await getUserProfile(currentUser.id);
-      setUserRole(profile?.role || 'resident');
-    }
-  };
-
   const loadFeed = async () => {
-    const postsData = await getRows('posts', {
-      order: [{ column: 'createdAt', ascending: false }],
-    });
+    try {
+      let postsData;
+      
+      // If user has a ward, only show posts from their ward
+      if (userProfile?.ward_id) {
+        postsData = await getRows('posts', {
+          filters: { ward_id: userProfile.ward_id },
+          order: [{ column: 'createdAt', ascending: false }],
+        });
+      } else {
+        // Fallback: show all posts if no ward assigned
+        postsData = await getRows('posts', {
+          order: [{ column: 'createdAt', ascending: false }],
+        });
+      }
 
-    const crimeAlerts = postsData.filter(p => p.type === 'crime_alert');
-    const others = postsData.filter(p => p.type !== 'crime_alert');
-    setPosts([...crimeAlerts, ...others]);
+      const crimeAlerts = postsData.filter(p => p.type === 'crime_alert');
+      const others = postsData.filter(p => p.type !== 'crime_alert');
+      setPosts([...crimeAlerts, ...others]);
+    } catch (error) {
+      console.error('Error loading feed:', error);
+    }
   };
 
   const subscribeToFeed = () => {
@@ -128,6 +141,9 @@ export default function CommunityFeedScreen() {
         createdAt: new Date().toISOString(),
         status: 'approved',
         priority: newPost.type === 'crime_alert' ? 'high' : 'normal',
+        // Add ward_id to posts for filtering
+        ward_id: userProfile?.ward_id || null,
+        suburb_id: userProfile?.suburb_id || null,
       });
 
       Alert.alert('Success', 'Post created successfully');
@@ -152,7 +168,11 @@ export default function CommunityFeedScreen() {
         {/* Header */}
         <View style={{ backgroundColor: colors.primary, padding: 20 }}>
           <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#fff' }}>Community Feed</Text>
-          <Text style={{ fontSize: 14, color: '#fff', opacity: 0.8 }}>Stay informed with latest updates</Text>
+          {userProfile?.ward_number && (
+            <Text style={{ fontSize: 14, color: '#fff', opacity: 0.8 }}>
+              Ward {userProfile.ward_number} • {userProfile.suburb_name || 'Your Community'}
+            </Text>
+          )}
         </View>
 
         {/* Stats row */}
@@ -234,7 +254,7 @@ export default function CommunityFeedScreen() {
             <View style={{ padding: 40, alignItems: 'center' }}>
               <Ionicons name="newspaper-outline" size={60} color={colors.textLight} />
               <Text style={{ color: colors.textLight, marginTop: 10, textAlign: 'center' }}>
-                No posts yet. Check back later for community updates.
+                No posts in your ward yet. Check back later for community updates.
               </Text>
             </View>
           ) : (
@@ -251,7 +271,6 @@ export default function CommunityFeedScreen() {
                     padding: 16,
                     marginBottom: 12,
                     elevation: isCrimeAlert ? 4 : 1,
-                    // Red left accent stripe for crime alerts so they stand out visually
                     borderLeftWidth: isCrimeAlert ? 4 : 0,
                     borderLeftColor: isCrimeAlert ? colors.error : 'transparent',
                     shadowColor: isCrimeAlert ? colors.error : '#000',
@@ -261,7 +280,6 @@ export default function CommunityFeedScreen() {
                     opacity: isDeleting ? 0.5 : 1,
                   }}
                 >
-                  {/* Post header row */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
                     <View style={{
                       width: 40,
@@ -283,7 +301,6 @@ export default function CommunityFeedScreen() {
                       </Text>
                     </View>
 
-                    {/* Right-side badges + delete */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       {post.priority === 'high' && (
                         <View style={{ backgroundColor: colors.error, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
@@ -291,7 +308,6 @@ export default function CommunityFeedScreen() {
                         </View>
                       )}
 
-                      {/* Delete button — only visible to community leaders */}
                       {isLeader && (
                         <TouchableOpacity
                           onPress={() => handleDeletePost(post)}
@@ -353,7 +369,6 @@ export default function CommunityFeedScreen() {
                 paddingBottom: Platform.OS === 'ios' ? 36 : 24,
                 maxHeight: '90%',
               }}>
-                {/* Drag handle */}
                 <View style={{ width: 40, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
 
                 <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 16, color: colors.primary }}>Create Post</Text>

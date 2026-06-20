@@ -1,162 +1,309 @@
-import 'react-native-url-polyfill/auto';
+import { createClient } from "@supabase/supabase-js";
+import "react-native-url-polyfill/auto";
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
+// Check if we're on web
+const isWeb = typeof window !== "undefined" && window.document !== undefined;
 
-export const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-export const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
-
-if (!isSupabaseConfigured) {
-  console.warn(
-    'Supabase is not configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to .env.'
-  );
-}
-
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        storage: AsyncStorage,
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: false,
+// Create storage adapter that works on both web and native
+const createStorage = () => {
+  if (isWeb) {
+    console.log("Using localStorage for web");
+    return {
+      getItem: (key) => {
+        try {
+          return Promise.resolve(localStorage.getItem(key));
+        } catch (e) {
+          return Promise.resolve(null);
+        }
       },
-    })
-  : null;
-
-export function getSupabaseClient() {
-  if (!supabase) {
-    throw new Error(
-      'Supabase is not configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to .env.'
-    );
+      setItem: (key, value) => {
+        try {
+          localStorage.setItem(key, value);
+          return Promise.resolve();
+        } catch (e) {
+          return Promise.resolve();
+        }
+      },
+      removeItem: (key) => {
+        try {
+          localStorage.removeItem(key);
+          return Promise.resolve();
+        } catch (e) {
+          return Promise.resolve();
+        }
+      },
+    };
   }
 
-  return supabase;
+  try {
+    const AsyncStorage = require("@react-native-async-storage/async-storage").default;
+    console.log("Using AsyncStorage for native");
+    return AsyncStorage;
+  } catch (e) {
+    console.warn("AsyncStorage not available, using memory storage");
+    return {
+      getItem: (key) => Promise.resolve(null),
+      setItem: (key, value) => Promise.resolve(),
+      removeItem: (key) => Promise.resolve(),
+    };
+  }
+};
+
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn("⚠️ Missing Supabase environment variables");
 }
 
-export async function getCurrentUser() {
-  const client = getSupabaseClient();
-  const { data, error } = await client.auth.getUser();
+console.log("🔐 Initializing Supabase client...");
 
-  if (error) {
+// Create Supabase client
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: createStorage(),
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
+
+// ✅ GET CURRENT USER
+export const getCurrentUser = async () => {
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (error) throw error;
+    return user;
+  } catch (error) {
+    console.error("Error getting current user:", error);
+    return null;
+  }
+};
+
+// ✅ GET ROWS FROM ANY TABLE
+export const getRows = async (table, options = {}) => {
+  try {
+    let query = supabase.from(table).select("*");
+
+    if (options.filters) {
+      Object.keys(options.filters).forEach((key) => {
+        query = query.eq(key, options.filters[key]);
+      });
+    }
+
+    if (options.order) {
+      options.order.forEach((order) => {
+        query = query.order(order.column, {
+          ascending: order.ascending || false,
+        });
+      });
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error(`Error getting rows from ${table}:`, error);
+    return [];
+  }
+};
+
+// ✅ GET SINGLE ROW
+export const getRow = async (table, id) => {
+  try {
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error(`Error getting row from ${table}:`, error);
+    return null;
+  }
+};
+
+// ✅ INSERT A ROW
+export const insertRow = async (table, data) => {
+  try {
+    const { data: inserted, error } = await supabase
+      .from(table)
+      .insert(data)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return inserted;
+  } catch (error) {
+    console.error(`Error inserting row into ${table}:`, error);
     throw error;
   }
+};
 
-  return data.user;
-}
+// ✅ UPDATE A ROW
+export const updateRow = async (table, id, data) => {
+  try {
+    const { data: updated, error } = await supabase
+      .from(table)
+      .update(data)
+      .eq("id", id)
+      .select()
+      .single();
 
-export async function getUserProfile(userId) {
-  const client = getSupabaseClient();
-  const { data, error } = await client
-    .from('users')
-    .select('*')
-    .eq('id', userId)
-    .maybeSingle();
-
-  if (error) {
+    if (error) throw error;
+    return updated;
+  } catch (error) {
+    console.error(`Error updating row in ${table}:`, error);
     throw error;
   }
+};
 
-  return data;
-}
-
-export async function getRows(table, options = {}) {
-  const client = getSupabaseClient();
-  let request = client.from(table).select('*');
-
-  for (const filter of options.eq || []) {
-    request = request.eq(filter.column, filter.value);
-  }
-
-  for (const filter of options.neq || []) {
-    request = request.neq(filter.column, filter.value);
-  }
-
-  for (const order of options.order || []) {
-    request = request.order(order.column, { ascending: order.ascending ?? true });
-  }
-
-  const { data, error } = await request;
-
-  if (error) {
+// ✅ DELETE A ROW
+export const deleteRow = async (table, id) => {
+  try {
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .eq("id", id);
+    
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error(`Error deleting row from ${table}:`, error);
     throw error;
   }
+};
 
-  return data || [];
-}
+// ✅ SUBSCRIBE TO TABLE CHANGES
+export const subscribeToTable = (table, callback) => {
+  const channelName = `table-changes-${table}-${Date.now()}`;
+  const channel = supabase.channel(channelName);
 
-export async function insertRow(table, row) {
-  const client = getSupabaseClient();
-  const { data, error } = await client.from(table).insert(row).select().single();
+  channel.on(
+    "postgres_changes",
+    {
+      event: "*",
+      schema: "public",
+      table: table,
+    },
+    (payload) => {
+      console.log(`Change on ${table}:`, payload);
+      if (callback) {
+        callback(payload);
+      }
+    },
+  );
 
-  if (error) {
-    throw error;
-  }
-
-  return data;
-}
-
-export async function upsertRow(table, row) {
-  const client = getSupabaseClient();
-  const { data, error } = await client.from(table).upsert(row).select().single();
-
-  if (error) {
-    throw error;
-  }
-
-  return data;
-}
-
-export async function updateRow(table, id, updates) {
-  const client = getSupabaseClient();
-  const { data, error } = await client.from(table).update(updates).eq('id', id).select().single();
-
-  if (error) {
-    throw error;
-  }
-
-  return data;
-}
-
-export async function deleteRow(table, id) {
-  const client = getSupabaseClient();
-  const { error } = await client.from(table).delete().eq('id', id);
-
-  if (error) {
-    throw error;
-  }
-}
-
-export function subscribeToTable(table, onChange) {
-  const client = getSupabaseClient();
-  const channel = client
-    .channel(`${table}-changes`)
-    .on('postgres_changes', { event: '*', schema: 'public', table }, onChange)
-    .subscribe();
+  channel.subscribe((status) => {
+    console.log(`Subscription for ${table}:`, status);
+  });
 
   return () => {
-    client.removeChannel(channel);
+    console.log(`Unsubscribing from ${table}...`);
+    channel.unsubscribe();
   };
-}
+};
 
-export function getFriendlySupabaseError(error) {
-  const message = error?.message || String(error);
+// Helper function to get user profile
+export const getUserProfile = async (userId) => {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", userId)
+      .single();
 
-  if (message.toLowerCase().includes('unsupported phone provider')) {
-    return (
-      'Phone OTP is not fully configured in Supabase yet. In Supabase, enable Phone Auth and configure an SMS provider such as Twilio, MessageBird, Vonage, or TextLocal.'
-    );
+    if (error) {
+      if (error.code === "PGRST116") {
+        return null;
+      }
+      throw error;
+    }
+    return data;
+  } catch (error) {
+    console.error("Error getting user profile:", error);
+    return null;
   }
+};
 
-  if (
-    message.toLowerCase().includes('schema cache') ||
-    message.toLowerCase().includes("could not find the table 'public.users'")
-  ) {
-    return (
-      'A required Supabase table is missing. Run supabase/schema.sql in the Supabase SQL Editor, then wait a few seconds for the API schema cache to refresh.'
-    );
+// ✅ UPSERT FUNCTION
+export const upsertRow = async (table, data) => {
+  try {
+    const client = getSupabaseClient();
+
+    if (data.id) {
+      const { data: existing, error: checkError } = await client
+        .from(table)
+        .select("id")
+        .eq("id", data.id)
+        .single();
+
+      if (checkError && checkError.code !== "PGRST116") {
+        throw checkError;
+      }
+
+      if (existing) {
+        const { data: updated, error: updateError } = await client
+          .from(table)
+          .update(data)
+          .eq("id", data.id)
+          .select()
+          .single();
+
+        if (updateError) throw updateError;
+        return updated;
+      }
+    }
+
+    const { data: inserted, error: insertError } = await client
+      .from(table)
+      .insert(data)
+      .select()
+      .single();
+
+    if (insertError) throw insertError;
+    return inserted;
+  } catch (error) {
+    console.error("Error in upsertRow:", error);
+    throw error;
+  }
+};
+
+// Helper function to get friendly error messages
+export const getFriendlySupabaseError = (error) => {
+  if (!error) return "An unknown error occurred";
+
+  const message = error.message || "";
+
+  if (message.includes("Invalid login credentials")) {
+    return "Invalid phone number or password. Please try again.";
+  }
+  if (message.includes("Email not confirmed")) {
+    return "Please verify your email before logging in.";
+  }
+  if (message.includes("User not found")) {
+    return "No account found with this phone number. Please sign up.";
+  }
+  if (message.includes("Network request failed")) {
+    return "Network error. Please check your internet connection.";
+  }
+  if (message.includes("OTP expired")) {
+    return "The verification code has expired. Please request a new one.";
+  }
+  if (message.includes("Invalid OTP")) {
+    return "Invalid verification code. Please try again.";
   }
 
   return message;
-}
+};
+
+// Get Supabase client (for backwards compatibility)
+export const getSupabaseClient = () => supabase;
+
+// Export default for convenience
+export default supabase;

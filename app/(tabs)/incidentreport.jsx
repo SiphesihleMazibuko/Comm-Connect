@@ -14,7 +14,7 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getCurrentUser, getRows, insertRow } from '../../config/supabase';
+import { getCurrentUser, getRows, insertRow, getUserProfile } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
 export default function IncidentReportScreen() {
@@ -23,6 +23,7 @@ export default function IncidentReportScreen() {
 
   const router = useRouter();
   const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
 
   const [reportType, setReportType] = useState('crime');
   const [description, setDescription] = useState('');
@@ -44,8 +45,13 @@ export default function IncidentReportScreen() {
     const load = async () => {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
-      await loadUserPinpoints(currentUser);
-      await loadUserReports(currentUser);
+      
+      if (currentUser) {
+        const profile = await getUserProfile(currentUser.id);
+        setUserProfile(profile);
+        await loadUserPinpoints(currentUser);
+        await loadUserReports(currentUser);
+      }
     };
 
     load();
@@ -178,9 +184,29 @@ export default function IncidentReportScreen() {
     console.log('selectedPinpoint:', selectedPinpoint);
     console.log('images:', images);
     console.log('user:', user?.id);
+    console.log('userProfile:', userProfile);
 
     if (!user) {
       Alert.alert('Error', 'You must be logged in to submit a report.');
+      return;
+    }
+
+    // Check if user has ward assigned
+    if (!userProfile?.ward_id) {
+      Alert.alert(
+        'Location Required',
+        'Your account does not have a ward assigned. Please update your profile in Settings.',
+        [
+          {
+            text: 'Go to Settings',
+            onPress: () => router.push('/(tabs)/settings')
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          }
+        ]
+      );
       return;
     }
 
@@ -221,6 +247,7 @@ export default function IncidentReportScreen() {
         imageUrls = await uploadImages();
       }
 
+      // Submit report with ward_id and suburb_id
       await insertRow('reports', {
         userId: anonymous ? null : user.id,
         submittedBy: user.id,
@@ -236,7 +263,10 @@ export default function IncidentReportScreen() {
         },
         anonymous,
         status: 'pending_review',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        // ─── KEY: Include ward_id and suburb_id ──────────────────
+        suburb_id: userProfile.suburb_id,
+        ward_id: userProfile.ward_id,
       });
 
       setDescription('');

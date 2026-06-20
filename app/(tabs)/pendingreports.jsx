@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Modal, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getCurrentUser, getRows, insertRow, updateRow } from '../../config/supabase';
+import { getCurrentUser, getRows, getUserProfile, insertRow, updateRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
 const EMERGENCY_SERVICES = [
@@ -37,6 +37,8 @@ export default function PendingReportsScreen() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
 
   // Detail view modal
   const [detailModalVisible, setDetailModalVisible] = useState(false);
@@ -48,12 +50,15 @@ export default function PendingReportsScreen() {
   const [dispatching, setDispatching] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const [user, setUser] = useState(null);
 
   useEffect(() => {
     const load = async () => {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
+      if (currentUser) {
+        const profile = await getUserProfile(currentUser.id);
+        setUserProfile(profile);
+      }
       await fetchPendingReports();
     };
 
@@ -63,9 +68,23 @@ export default function PendingReportsScreen() {
 
   const fetchPendingReports = async () => {
     try {
-      const reportsData = await getRows('reports', {
-        eq: [{ column: 'status', value: 'pending_review' }],
-      });
+      let reportsData;
+      
+      // Community leaders see pending reports from their ward
+      if (userProfile?.role === 'community_leader' && userProfile?.ward_id) {
+        reportsData = await getRows('reports', {
+          filters: { 
+            status: 'pending_review',
+            ward_id: userProfile.ward_id 
+          },
+        });
+      } else {
+        // Fallback: show all pending reports
+        reportsData = await getRows('reports', {
+          filters: { status: 'pending_review' },
+        });
+      }
+      
       setReports(reportsData);
     } catch (error) {
       console.error('Error fetching reports:', error);
@@ -89,7 +108,7 @@ export default function PendingReportsScreen() {
     );
   };
 
-  // Step 2 — leader confirms dispatch → write to Firestore
+  // Step 2 — leader confirms dispatch → write to Supabase
   const handleConfirmApprove = async () => {
     if (!reportToApprove) return;
     setDispatching(true);
@@ -106,7 +125,7 @@ export default function PendingReportsScreen() {
         dispatchedServices: chosenServices.map((s) => s.serviceType),
       });
 
-      // 2. Create a community feed post
+      // 2. Create a community feed post with ward_id
       await insertRow('posts', {
         type:
           reportToApprove.reportType === 'crime'
@@ -122,21 +141,26 @@ export default function PendingReportsScreen() {
         status: 'approved',
         priority: 'high',
         sourceReportId: reportToApprove.id,
+        // Add ward_id and suburb_id from the report
+        ward_id: reportToApprove.ward_id,
+        suburb_id: reportToApprove.suburb_id,
       });
 
-      // 3. Create one dispatch record per selected service.
-      //    Responder dashboards listen to `emergency_dispatches` filtered by their serviceType.
+      // 3. Create one dispatch record per selected service
       for (const service of chosenServices) {
         await insertRow('emergency_dispatches', {
           reportId: reportToApprove.id,
-          serviceType: service.serviceType,          // 'police' | 'ambulance' | 'fire'
+          serviceType: service.serviceType,
           reportType: reportToApprove.reportType,
           description: reportToApprove.description,
           location: reportToApprove.location || null,
           dispatchedAt: now,
           dispatchedBy: user?.id,
-          status: 'pending',                         // responder dashboard can update to 'en_route' / 'resolved'
+          status: 'pending',
           acknowledged: false,
+          // Add location IDs
+          ward_id: reportToApprove.ward_id,
+          suburb_id: reportToApprove.suburb_id,
         });
       }
 
@@ -233,6 +257,11 @@ export default function PendingReportsScreen() {
                   <Text style={{ fontSize: 12, color: '#fff', opacity: 0.8, marginTop: 4 }}>
                     {report.createdAt ? new Date(report.createdAt).toLocaleDateString() : 'Just now'}
                   </Text>
+                  {report.ward_id && (
+                    <Text style={{ fontSize: 10, color: '#fff', opacity: 0.7, marginTop: 2 }}>
+                      Ward {report.ward_id}
+                    </Text>
+                  )}
                 </View>
               </View>
 
@@ -290,6 +319,11 @@ export default function PendingReportsScreen() {
                 <Text style={{ fontSize: 14, color: '#fff', opacity: 0.9, marginTop: 8 }}>
                   {reports.length} reports awaiting review
                 </Text>
+                {userProfile?.ward_number && (
+                  <Text style={{ fontSize: 12, color: '#fff', opacity: 0.7, marginTop: 4 }}>
+                    Ward {userProfile.ward_number}
+                  </Text>
+                )}
               </View>
               <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}>
                 <Ionicons name="checkmark-done-circle" size={32} color="#fff" />
@@ -308,7 +342,7 @@ export default function PendingReportsScreen() {
               <Ionicons name="checkmark-circle" size={60} color={colors.accent} />
               <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginTop: 16 }}>All Clear! ✨</Text>
               <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 8, textAlign: 'center' }}>
-                No pending reports to review
+                No pending reports in your ward
               </Text>
             </LinearGradient>
           ) : (
@@ -352,10 +386,14 @@ export default function PendingReportsScreen() {
                   <Text style={{ fontSize: 16, color: colors.text, marginTop: 4 }}>
                     {selectedReport.location?.latitude}, {selectedReport.location?.longitude}
                   </Text>
+                  {selectedReport.ward_id && (
+                    <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 4 }}>
+                      Ward: {selectedReport.ward_id}
+                    </Text>
+                  )}
                 </View>
 
                 <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
-                  {/* Approve from detail view also goes through dispatch modal */}
                   <TouchableOpacity
                     onPress={() => openDispatchModal(selectedReport)}
                     style={{ flex: 1, backgroundColor: '#10B981', padding: 14, borderRadius: 16, alignItems: 'center' }}
@@ -385,10 +423,8 @@ export default function PendingReportsScreen() {
             padding: 24,
             paddingBottom: 36,
           }}>
-            {/* Drag handle */}
             <View style={{ width: 40, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: 20 }} />
 
-            {/* Title */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 }}>
               <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' }}>
                 <Ionicons name="radio" size={20} color="#D97706" />
@@ -399,7 +435,6 @@ export default function PendingReportsScreen() {
               Select which emergency services to alert. Responders will be notified immediately.
             </Text>
 
-            {/* Service selector */}
             <View style={{ gap: 12, marginBottom: 28 }}>
               {EMERGENCY_SERVICES.map((service) => {
                 const isSelected = selectedServices.includes(service.id);
@@ -418,7 +453,6 @@ export default function PendingReportsScreen() {
                       backgroundColor: isSelected ? service.bg : colors.background,
                     }}
                   >
-                    {/* Service icon */}
                     <View style={{
                       width: 44,
                       height: 44,
@@ -434,7 +468,6 @@ export default function PendingReportsScreen() {
                       {service.label}
                     </Text>
 
-                    {/* Checkbox */}
                     <View style={{
                       width: 24,
                       height: 24,
@@ -452,7 +485,6 @@ export default function PendingReportsScreen() {
               })}
             </View>
 
-            {/* "No services needed" hint */}
             {selectedServices.length === 0 && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16, backgroundColor: '#FFF7ED', borderRadius: 10, padding: 10 }}>
                 <Ionicons name="information-circle" size={18} color="#D97706" />
@@ -462,7 +494,6 @@ export default function PendingReportsScreen() {
               </View>
             )}
 
-            {/* Action buttons */}
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <TouchableOpacity
                 style={{ flex: 1, backgroundColor: colors.border, borderRadius: 14, padding: 14, alignItems: 'center' }}

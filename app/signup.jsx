@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -41,7 +41,194 @@ export default function SignupScreen() {
   const [organizationName, setOrganizationName] = useState('');
   const [responderType, setResponderType] = useState('');
 
-  // OTP state
+  // ─── Location Hierarchy States ────────────────────────────────────
+  const [provinces, setProvinces] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [suburbs, setSuburbs] = useState([]);
+  const [zones, setZones] = useState([]);
+  const [wards, setWards] = useState([]);
+
+  const [selectedProvince, setSelectedProvince] = useState(null);
+  const [selectedCity, setSelectedCity] = useState(null);
+  const [selectedSuburb, setSelectedSuburb] = useState(null);
+  const [selectedZone, setSelectedZone] = useState(null);
+  const [selectedWard, setSelectedWard] = useState(null);
+
+  const [loadingLocations, setLoadingLocations] = useState(false);
+  const [locationErrors, setLocationErrors] = useState({});
+
+  // ─── Load Provinces on Mount ────────────────────────────────────────────
+  useEffect(() => {
+    loadProvinces();
+  }, []);
+
+  const loadProvinces = async () => {
+    try {
+      setLoadingLocations(true);
+      const client = getSupabaseClient();
+      const { data, error } = await client
+        .from('provinces')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      console.log('✅ Provinces loaded:', data?.length || 0);
+      setProvinces(data || []);
+    } catch (error) {
+      console.error('Error loading provinces:', error);
+      Alert.alert('Error', 'Failed to load provinces');
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const loadCities = async (provinceId) => {
+    try {
+      setLoadingLocations(true);
+      const client = getSupabaseClient();
+      const { data, error } = await client
+        .from('cities')
+        .select('*')
+        .eq('province_id', provinceId)
+        .order('name');
+
+      if (error) throw error;
+      console.log('✅ Cities loaded:', data?.length || 0);
+      setCities(data || []);
+      setSelectedCity(null);
+      setSuburbs([]);
+      setZones([]);
+      setWards([]);
+    } catch (error) {
+      console.error('Error loading cities:', error);
+      Alert.alert('Error', 'Failed to load cities');
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const loadSuburbs = async (cityId) => {
+    try {
+      setLoadingLocations(true);
+      const client = getSupabaseClient();
+      const { data, error } = await client
+        .from('suburbs')
+        .select('*')
+        .eq('city_id', cityId)
+        .order('name');
+
+      if (error) throw error;
+      console.log('✅ Suburbs loaded:', data?.length || 0);
+      setSuburbs(data || []);
+      setSelectedSuburb(null);
+      setZones([]);
+      setWards([]);
+    } catch (error) {
+      console.error('Error loading suburbs:', error);
+      Alert.alert('Error', 'Failed to load suburbs');
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const loadZones = async (suburbId) => {
+    try {
+      setLoadingLocations(true);
+      const client = getSupabaseClient();
+      const { data, error } = await client
+        .from('zones')
+        .select('*')
+        .eq('suburb_id', suburbId)
+        .order('name');
+
+      if (error) throw error;
+      console.log('✅ Zones loaded:', data?.length || 0);
+      setZones(data || []);
+      setSelectedZone(null);
+    } catch (error) {
+      console.error('Error loading zones:', error);
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const loadWards = async (suburbId) => {
+    try {
+      setLoadingLocations(true);
+      const client = getSupabaseClient();
+      const { data, error } = await client
+        .from('wards')
+        .select('*')
+        .eq('suburb_id', suburbId)
+        .order('ward_number');
+
+      if (error) throw error;
+      console.log('✅ Wards loaded:', data?.length || 0);
+      setWards(data || []);
+      setSelectedWard(null);
+    } catch (error) {
+      console.error('Error loading wards:', error);
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  // ─── Location Selection Handlers ──────────────────────────────────────
+  const handleProvinceSelect = (province) => {
+    setSelectedProvince(province);
+    setSelectedCity(null);
+    setSelectedSuburb(null);
+    setSelectedZone(null);
+    setSelectedWard(null);
+    setCities([]);
+    setSuburbs([]);
+    setZones([]);
+    setWards([]);
+    loadCities(province.id);
+  };
+
+  const handleCitySelect = (city) => {
+    setSelectedCity(city);
+    setSelectedSuburb(null);
+    setSelectedZone(null);
+    setSelectedWard(null);
+    setSuburbs([]);
+    setZones([]);
+    setWards([]);
+    loadSuburbs(city.id);
+  };
+
+  const handleSuburbSelect = (suburb) => {
+    setSelectedSuburb(suburb);
+    setSelectedZone(null);
+    setSelectedWard(null);
+    setZones([]);
+    setWards([]);
+    loadZones(suburb.id);
+    loadWards(suburb.id);
+  };
+
+  const handleZoneSelect = (zone) => {
+    setSelectedZone(zone);
+  };
+
+  const handleWardSelect = (ward) => {
+    setSelectedWard(ward);
+  };
+
+  // ─── Validate Location ──────────────────────────────────────────────────
+  const validateLocation = () => {
+    const errors = {};
+    if (!selectedProvince) errors.province = 'Please select a province';
+    if (!selectedCity) errors.city = 'Please select a city';
+    if (!selectedSuburb) errors.suburb = 'Please select a suburb';
+    if (!selectedWard) errors.ward = 'Please select a ward number';
+
+    setLocationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // ─── OTP state ──────────────────────────────────────────────────────────
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''));
   const [verificationId, setVerificationId] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -66,45 +253,49 @@ export default function SignupScreen() {
     }
   ];
 
+  // ─── Send OTP ──────────────────────────────────────────────────────────
+  const handleSendOTP = async () => {
+    if (!selectedRole) {
+      Alert.alert('Error', 'Please select an account type');
+      return;
+    }
 
-// ─── Mock Send OTP (no real SMS) ─────────────────────────────────────────
-const handleSendOTP = async () => {
-  if (!selectedRole) {
-    Alert.alert('Error', 'Please select an account type');
-    return;
-  }
+    if (!firstName || !lastName || !email || !phoneNumber || !idNumber || !location) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
 
-  if (!firstName || !lastName || !email || !phoneNumber || !idNumber || !location) {
-    Alert.alert('Error', 'Please fill in all required fields');
-    return;
-  }
+    if (!validateLocation()) {
+      Alert.alert('Error', 'Please complete your location details');
+      return;
+    }
 
-  if (selectedRole === 'community_leader' && !organizationName) {
-    Alert.alert('Error', 'Please enter your community or organisation name');
-    return;
-  }
+    if (selectedRole === 'community_leader' && !organizationName) {
+      Alert.alert('Error', 'Please enter your community or organisation name');
+      return;
+    }
 
-  if (selectedRole === 'emergency_responder' && !responderType) {
-    Alert.alert('Error', 'Please enter your responder type');
-    return;
-  }
+    if (selectedRole === 'emergency_responder' && !responderType) {
+      Alert.alert('Error', 'Please enter your responder type');
+      return;
+    }
 
-  setLoading(true);
-  try {
-    const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
-    const client = getSupabaseClient();
-    const { error } = await client.auth.signInWithOtp({ phone: fullPhoneNumber });
-    if (error) throw error;
+    setLoading(true);
+    try {
+      const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
+      const client = getSupabaseClient();
+      const { error } = await client.auth.signInWithOtp({ phone: fullPhoneNumber });
+      if (error) throw error;
 
-    setVerificationId(fullPhoneNumber);
-    setStep('otp');
-    Alert.alert('OTP Sent', `A verification code was sent to ${fullPhoneNumber}`);
-  } catch (error) {
-    Alert.alert('Error', getFriendlySupabaseError(error));
-  } finally {
-    setLoading(false);
-  }
-};
+      setVerificationId(fullPhoneNumber);
+      setStep('otp');
+      Alert.alert('OTP Sent', `A verification code was sent to ${fullPhoneNumber}`);
+    } catch (error) {
+      Alert.alert('Error', getFriendlySupabaseError(error));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ─── OTP Input Handlers ──────────────────────────────────────────────────
   const handleOtpChange = (value, index) => {
@@ -137,69 +328,278 @@ const handleSendOTP = async () => {
     }
   };
 
-  // ─── Mock Verify OTP & Create Account ─────────────────────────────────────────
-const handleVerifyAndCreate = async () => {
-  const otpString = otp.join('');
-  if (otpString.length < OTP_LENGTH) {
-    Alert.alert('Error', 'Please enter a 6-digit code');
-    return;
-  }
+  // ─── Verify OTP & Create Account ──────────────────────────────────────
+  const handleVerifyAndCreate = async () => {
+    const otpString = otp.join('');
+    if (otpString.length < OTP_LENGTH) {
+      Alert.alert('Error', 'Please enter a 6-digit code');
+      return;
+    }
 
-  setLoading(true);
-  try {
-    const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
-    const client = getSupabaseClient();
-    const { data, error } = await client.auth.verifyOtp({
-      phone: verificationId || fullPhoneNumber,
-      token: otpString,
-      type: 'sms',
-    });
+    setLoading(true);
+    try {
+      const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
+      const client = getSupabaseClient();
+      const { data, error } = await client.auth.verifyOtp({
+        phone: verificationId || fullPhoneNumber,
+        token: otpString,
+        type: 'sms',
+      });
 
-    if (error) throw error;
-    if (!data.user) throw new Error('Could not create Supabase user.');
+      if (error) throw error;
+      if (!data.user) throw new Error('Could not create Supabase user.');
 
-    await upsertRow('users', {
-      id: data.user.id,
-      firstName,
-      lastName,
-      email,
-      phoneNumber: fullPhoneNumber,
-      idNumber,
-      location,
-      role: selectedRole,
-      organizationName: selectedRole === 'community_leader' ? organizationName : null,
-      responderType: selectedRole === 'emergency_responder' ? responderType : null,
-      permissions: {
-        locationEnabled: false,
-        notificationsEnabled: false,
-        canReportIncident: true,
-        canRequestEmergency: true,
-        canReviewReports: selectedRole === 'community_leader',
-        canRespondToEmergency: selectedRole === 'emergency_responder',
-        canSendCommunityAlerts: selectedRole === 'community_leader'
-      },
-      createdAt: new Date().toISOString(),
-      isMockUser: false
-    });
+      await upsertRow('users', {
+        id: data.user.id,
+        firstName,
+        lastName,
+        email,
+        phoneNumber: fullPhoneNumber,
+        idNumber,
+        location,
+        role: selectedRole,
+        organizationName: selectedRole === 'community_leader' ? organizationName : null,
+        responderType: selectedRole === 'emergency_responder' ? responderType : null,
+        // ─── Location IDs ──────────────────────────────────────────────────
+        province_id: selectedProvince?.id || null,
+        city_id: selectedCity?.id || null,
+        suburb_id: selectedSuburb?.id || null,
+        zone_id: selectedZone?.id || null,
+        ward_id: selectedWard?.id || null,
+        permissions: {
+          locationEnabled: false,
+          notificationsEnabled: false,
+          canReportIncident: true,
+          canRequestEmergency: true,
+          canReviewReports: selectedRole === 'community_leader',
+          canRespondToEmergency: selectedRole === 'emergency_responder',
+          canSendCommunityAlerts: selectedRole === 'community_leader'
+        },
+        createdAt: new Date().toISOString(),
+        isMockUser: false
+      });
 
-    Alert.alert(
-      'Account Created Successfully!',
-      'Your account has been created. Please login to continue.',
-      [
-        {
-          text: 'Go to Login',
-          onPress: () => router.replace('/login')
-        }
-      ]
-    );
+      Alert.alert(
+        'Account Created Successfully!',
+        'Your account has been created. Please login to continue.',
+        [
+          {
+            text: 'Go to Login',
+            onPress: () => router.replace('/login')
+          }
+        ]
+      );
 
-  } catch (error) {
-    console.error('Signup error:', error);
-    Alert.alert('Signup Failed', getFriendlySupabaseError(error));
-  } finally {
-    setLoading(false);
-  }
-};
+    } catch (error) {
+      console.error('Signup error:', error);
+      Alert.alert('Signup Failed', getFriendlySupabaseError(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ─── Render Location Selector ──────────────────────────────────────────
+  const renderLocationSelector = () => (
+    <View style={{ marginBottom: 16 }}>
+      <Text style={labelStyle}>
+        📍 Your Location <Text style={{ color: colors.error }}>*</Text>
+      </Text>
+
+      {/* Province */}
+      <View style={{ marginBottom: 12 }}>
+        <Text style={subLabelStyle}>Province *</Text>
+        {loadingLocations && provinces.length === 0 ? (
+          <ActivityIndicator color={colors.accent} />
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+            {provinces.map((province) => (
+              <TouchableOpacity
+                key={province.id}
+                onPress={() => handleProvinceSelect(province)}
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  marginRight: 8,
+                  borderRadius: 20,
+                  backgroundColor: selectedProvince?.id === province.id ? colors.accent : colors.surface,
+                  borderWidth: 1,
+                  borderColor: selectedProvince?.id === province.id ? colors.accent : colors.border,
+                }}
+              >
+                <Text style={{
+                  color: selectedProvince?.id === province.id ? '#fff' : colors.text,
+                  fontWeight: selectedProvince?.id === province.id ? 'bold' : 'normal',
+                }}>
+                  {province.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+        {locationErrors.province && (
+          <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>{locationErrors.province}</Text>
+        )}
+      </View>
+
+      {/* City */}
+      {selectedProvince && (
+        <View style={{ marginBottom: 12 }}>
+          <Text style={subLabelStyle}>City / Town *</Text>
+          {loadingLocations ? (
+            <ActivityIndicator color={colors.accent} />
+          ) : cities.length === 0 ? (
+            <Text style={{ color: colors.textLight, fontSize: 14, paddingVertical: 8 }}>No cities available</Text>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+              {cities.map((city) => (
+                <TouchableOpacity
+                  key={city.id}
+                  onPress={() => handleCitySelect(city)}
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    marginRight: 8,
+                    borderRadius: 20,
+                    backgroundColor: selectedCity?.id === city.id ? colors.accent : colors.surface,
+                    borderWidth: 1,
+                    borderColor: selectedCity?.id === city.id ? colors.accent : colors.border,
+                  }}
+                >
+                  <Text style={{
+                    color: selectedCity?.id === city.id ? '#fff' : colors.text,
+                    fontWeight: selectedCity?.id === city.id ? 'bold' : 'normal',
+                  }}>
+                    {city.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+          {locationErrors.city && (
+            <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>{locationErrors.city}</Text>
+          )}
+        </View>
+      )}
+
+      {/* Suburb */}
+      {selectedCity && (
+        <View style={{ marginBottom: 12 }}>
+          <Text style={subLabelStyle}>Suburb *</Text>
+          {loadingLocations ? (
+            <ActivityIndicator color={colors.accent} />
+          ) : suburbs.length === 0 ? (
+            <Text style={{ color: colors.textLight, fontSize: 14, paddingVertical: 8 }}>No suburbs available</Text>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+              {suburbs.map((suburb) => (
+                <TouchableOpacity
+                  key={suburb.id}
+                  onPress={() => handleSuburbSelect(suburb)}
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    marginRight: 8,
+                    borderRadius: 20,
+                    backgroundColor: selectedSuburb?.id === suburb.id ? colors.accent : colors.surface,
+                    borderWidth: 1,
+                    borderColor: selectedSuburb?.id === suburb.id ? colors.accent : colors.border,
+                  }}
+                >
+                  <Text style={{
+                    color: selectedSuburb?.id === suburb.id ? '#fff' : colors.text,
+                    fontWeight: selectedSuburb?.id === suburb.id ? 'bold' : 'normal',
+                  }}>
+                    {suburb.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+          {locationErrors.suburb && (
+            <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>{locationErrors.suburb}</Text>
+          )}
+        </View>
+      )}
+
+      {/* Zone (Optional) */}
+      {selectedSuburb && zones.length > 0 && (
+        <View style={{ marginBottom: 12 }}>
+          <Text style={subLabelStyle}>Zone (Optional)</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+            {zones.map((zone) => (
+              <TouchableOpacity
+                key={zone.id}
+                onPress={() => handleZoneSelect(zone)}
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  marginRight: 8,
+                  borderRadius: 20,
+                  backgroundColor: selectedZone?.id === zone.id ? colors.accent : colors.surface,
+                  borderWidth: 1,
+                  borderColor: selectedZone?.id === zone.id ? colors.accent : colors.border,
+                }}
+              >
+                <Text style={{
+                  color: selectedZone?.id === zone.id ? '#fff' : colors.text,
+                  fontWeight: selectedZone?.id === zone.id ? 'bold' : 'normal',
+                }}>
+                  {zone.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Ward */}
+      {selectedSuburb && (
+        <View style={{ marginBottom: 12 }}>
+          <Text style={subLabelStyle}>Ward Number *</Text>
+          {loadingLocations ? (
+            <ActivityIndicator color={colors.accent} />
+          ) : wards.length === 0 ? (
+            <Text style={{ color: colors.textLight, fontSize: 14, paddingVertical: 8 }}>No wards available</Text>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+              {wards.map((ward) => (
+                <TouchableOpacity
+                  key={ward.id}
+                  onPress={() => handleWardSelect(ward)}
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    marginRight: 8,
+                    borderRadius: 20,
+                    backgroundColor: selectedWard?.id === ward.id ? colors.accent : colors.surface,
+                    borderWidth: 1,
+                    borderColor: selectedWard?.id === ward.id ? colors.accent : colors.border,
+                  }}
+                >
+                  <Text style={{
+                    color: selectedWard?.id === ward.id ? '#fff' : colors.text,
+                    fontWeight: selectedWard?.id === ward.id ? 'bold' : 'normal',
+                  }}>
+                    Ward {ward.ward_number}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+          {locationErrors.ward && (
+            <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>{locationErrors.ward}</Text>
+          )}
+        </View>
+      )}
+
+      {loadingLocations && (
+        <View style={{ alignItems: 'center', marginVertical: 8 }}>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={{ color: colors.textLight, fontSize: 12, marginTop: 4 }}>Loading locations...</Text>
+        </View>
+      )}
+    </View>
+  );
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -374,14 +774,22 @@ const handleVerifyAndCreate = async () => {
                   />
                 </View>
 
+                {/* ─── Location Selector ────────────────────────────── */}
+                {renderLocationSelector()}
+
+                {/* ─── Address Details ──────────────── */}
                 <View style={{ marginBottom: 12 }}>
-                  <Text style={labelStyle}>Location</Text>
+                  <Text style={labelStyle}>Address Details</Text>
                   <TextInput
-                    style={inputStyle}
-                    placeholder="Your area, e.g. Soweto, Zone 1"
+                    style={[inputStyle, { minHeight: 60, textAlignVertical: 'top' }]}
+                    placeholder="e.g., 12 Melle Street, Braamfontein"
                     value={location}
                     onChangeText={setLocation}
+                    multiline
                   />
+                  <Text style={{ fontSize: 11, color: colors.textLight, marginTop: 4 }}>
+                    Help emergency responders find you
+                  </Text>
                 </View>
 
                 {selectedRole === 'community_leader' && (
@@ -475,7 +883,6 @@ const handleVerifyAndCreate = async () => {
               <Text style={{ color: colors.accent, fontSize: 13 }}>← Change details</Text>
             </TouchableOpacity>
 
-            {/* ── VERIFY & CREATE BUTTON ── */}
             <TouchableOpacity
               style={{
                 backgroundColor: colors.accent,
@@ -516,6 +923,13 @@ const labelStyle = {
   fontWeight: '500',
   color: colors.text,
   marginBottom: 8
+};
+
+const subLabelStyle = {
+  fontSize: 12,
+  fontWeight: '500',
+  color: colors.textLight,
+  marginBottom: 6
 };
 
 const inputStyle = {
