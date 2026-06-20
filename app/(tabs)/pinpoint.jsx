@@ -206,8 +206,10 @@ export default function PinPointScreen() {
               </View>
 
               <TextInput
-                style={{ backgroundColor: colors.background, borderRadius: 8, padding: 12, marginTop: 12, borderWidth: 1, borderColor: colors.border }}
+                style={{ backgroundColor: colors.surfaceRaised, borderRadius: 8, padding: 12, marginTop: 12, borderWidth: 1, borderColor: colors.border, color: colors.text }}
                 placeholder="Label (e.g., Home, Work, Shop)"
+                placeholderTextColor={colors.textLight}
+                selectionColor={colors.accent}
                 value={addressLabel}
                 onChangeText={setAddressLabel}
               />

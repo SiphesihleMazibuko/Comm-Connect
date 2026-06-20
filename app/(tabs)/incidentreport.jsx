@@ -371,16 +371,19 @@ export default function IncidentReportScreen() {
 
           <TextInput
             style={{
-              backgroundColor: colors.surface,
+              backgroundColor: colors.surfaceRaised,
               borderRadius: 12,
               padding: 12,
               marginBottom: 24,
               borderWidth: 1,
               borderColor: colors.border,
               minHeight: 120,
-              textAlignVertical: 'top'
+              textAlignVertical: 'top',
+              color: colors.text
             }}
             placeholder="Describe what happened or what you observed..."
+            placeholderTextColor={colors.textLight}
+            selectionColor={colors.accent}
             multiline
             value={description}
             onChangeText={setDescription}

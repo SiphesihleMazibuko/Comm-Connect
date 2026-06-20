@@ -667,12 +667,12 @@ export default function SignupScreen() {
                 {/* ── Personal Details ── */}
                 <View style={{ marginBottom: 12 }}>
                   <Text style={labelStyle}>First Name</Text>
-                  <TextInput style={inputStyle} placeholder="John" value={firstName} onChangeText={setFirstName} />
+                  <TextInput style={inputStyle} placeholder="John" placeholderTextColor={colors.textLight} selectionColor={colors.accent} value={firstName} onChangeText={setFirstName} />
                 </View>
 
                 <View style={{ marginBottom: 12 }}>
                   <Text style={labelStyle}>Last Name</Text>
-                  <TextInput style={inputStyle} placeholder="Doe" value={lastName} onChangeText={setLastName} />
+                  <TextInput style={inputStyle} placeholder="Doe" placeholderTextColor={colors.textLight} selectionColor={colors.accent} value={lastName} onChangeText={setLastName} />
                 </View>
 
                 <View style={{ marginBottom: 12 }}>
@@ -680,6 +680,8 @@ export default function SignupScreen() {
                   <TextInput
                     style={inputStyle}
                     placeholder="john@example.com"
+                    placeholderTextColor={colors.textLight}
+                    selectionColor={colors.accent}
                     value={email}
                     onChangeText={setEmail}
                     autoCapitalize="none"
@@ -713,6 +715,8 @@ export default function SignupScreen() {
                     <TextInput
                       style={[inputStyle, { flex: 1 }]}
                       placeholder="81 234 5678"
+                      placeholderTextColor={colors.textLight}
+                      selectionColor={colors.accent}
                       value={phoneNumber}
                       onChangeText={setPhoneNumber}
                       keyboardType="phone-pad"
@@ -768,6 +772,8 @@ export default function SignupScreen() {
                   <TextInput
                     style={inputStyle}
                     placeholder="000000 0000 000"
+                    placeholderTextColor={colors.textLight}
+                    selectionColor={colors.accent}
                     value={idNumber}
                     onChangeText={setIdNumber}
                     keyboardType="numeric"
@@ -783,6 +789,8 @@ export default function SignupScreen() {
                   <TextInput
                     style={[inputStyle, { minHeight: 60, textAlignVertical: 'top' }]}
                     placeholder="e.g., 12 Melle Street, Braamfontein"
+                    placeholderTextColor={colors.textLight}
+                    selectionColor={colors.accent}
                     value={location}
                     onChangeText={setLocation}
                     multiline
@@ -798,6 +806,8 @@ export default function SignupScreen() {
                     <TextInput
                       style={inputStyle}
                       placeholder="e.g. Soweto Community Forum"
+                      placeholderTextColor={colors.textLight}
+                      selectionColor={colors.accent}
                       value={organizationName}
                       onChangeText={setOrganizationName}
                     />
@@ -810,6 +820,8 @@ export default function SignupScreen() {
                     <TextInput
                       style={inputStyle}
                       placeholder="e.g. Police, Ambulance, Fire, Security"
+                      placeholderTextColor={colors.textLight}
+                      selectionColor={colors.accent}
                       value={responderType}
                       onChangeText={setResponderType}
                     />
@@ -866,6 +878,7 @@ export default function SignupScreen() {
                   onChangeText={(val) => handleOtpChange(val, index)}
                   onKeyPress={(e) => handleOtpKeyPress(e, index)}
                   keyboardType="number-pad"
+                  selectionColor={colors.accent}
                   maxLength={6}
                   selectTextOnFocus
                   autoFocus={index === 0}
@@ -933,7 +946,7 @@ const subLabelStyle = {
 };
 
 const inputStyle = {
-  backgroundColor: colors.surface,
+  backgroundColor: colors.surfaceRaised,
   borderRadius: 12,
   padding: 14,
   fontSize: 16,

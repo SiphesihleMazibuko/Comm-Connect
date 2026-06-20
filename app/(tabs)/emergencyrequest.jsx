@@ -335,7 +335,7 @@ export default function EmergencyRequestScreen() {
           </Text>
           <TextInput
             style={{
-              backgroundColor: colors.surface,
+              backgroundColor: colors.surfaceRaised,
               borderRadius: 12,
               padding: 12,
               marginBottom: 16,
@@ -343,8 +343,11 @@ export default function EmergencyRequestScreen() {
               borderColor: colors.border,
               minHeight: 100,
               textAlignVertical: "top",
+              color: colors.text,
             }}
             placeholder="Describe your emergency..."
+            placeholderTextColor={colors.textLight}
+            selectionColor={colors.accent}
             multiline
             value={description}
             onChangeText={setDescription}
@@ -363,14 +366,17 @@ export default function EmergencyRequestScreen() {
           </Text>
           <TextInput
             style={{
-              backgroundColor: colors.surface,
+              backgroundColor: colors.surfaceRaised,
               borderRadius: 12,
               padding: 12,
               marginBottom: 24,
               borderWidth: 1,
               borderColor: colors.border,
+              color: colors.text,
             }}
             placeholder="Phone number for responders to reach you"
+            placeholderTextColor={colors.textLight}
+            selectionColor={colors.accent}
             value={contactDetails}
             onChangeText={setContactDetails}
             keyboardType="phone-pad"

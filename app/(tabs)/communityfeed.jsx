@@ -1,9 +1,30 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import colors from '../../Utils/colors';
 import { deleteRow, getCurrentUser, getRows, getUserProfile, insertRow, subscribeToTable } from '../../config/supabase';
+
+const ALERT_TYPES = ['crime_alert', 'emergency_notice', 'service_update'];
+
+const getElapsedTime = (dateValue, now) => {
+  if (!dateValue) return 'No alerts';
+
+  const alertDate = new Date(dateValue);
+  if (Number.isNaN(alertDate.getTime())) return 'No alerts';
+
+  const diffInSeconds = Math.max(0, Math.floor((now.getTime() - alertDate.getTime()) / 1000));
+  const minutes = Math.floor(diffInSeconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (diffInSeconds < 60) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
+
+  return alertDate.toLocaleDateString();
+};
 
 export default function CommunityFeedScreen() {
   const [posts, setPosts] = useState([]);
@@ -16,8 +37,84 @@ export default function CommunityFeedScreen() {
   const [deletingId, setDeletingId] = useState(null);
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
+  const [wardDetails, setWardDetails] = useState(null);
+  const [latestAlerts, setLatestAlerts] = useState({});
+  const [now, setNow] = useState(new Date());
 
   const isLeader = userRole === 'community_leader' || userRole === 'leader';
+
+  const fetchWardDetails = useCallback(async (profile) => {
+    if (!profile?.ward_id) {
+      setWardDetails(null);
+      return;
+    }
+
+    const details = {
+      wardId: profile.ward_id,
+      wardNumber: profile.ward_number || null,
+      suburbName: profile.suburb_name || null,
+      cityName: profile.city_name || null,
+      provinceName: profile.province_name || null,
+    };
+
+    try {
+      const [ward] = await getRows('wards', { filters: { id: profile.ward_id } });
+
+      if (ward) {
+        details.wardNumber = details.wardNumber || ward.ward_number || ward.number || null;
+
+        const suburbId = profile.suburb_id || ward.suburb_id;
+        if (!details.suburbName && suburbId) {
+          const [suburb] = await getRows('suburbs', { filters: { id: suburbId } });
+          details.suburbName = suburb?.name || null;
+
+          if (!details.cityName && suburb?.city_id) {
+            const [city] = await getRows('cities', { filters: { id: suburb.city_id } });
+            details.cityName = city?.name || null;
+
+            if (!details.provinceName && city?.province_id) {
+              const [province] = await getRows('provinces', { filters: { id: city.province_id } });
+              details.provinceName = province?.name || null;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading ward details:', error);
+    }
+
+    setWardDetails(details);
+  }, []);
+
+  const loadFeed = useCallback(async (profile) => {
+    setRefreshing(true);
+    try {
+      if (!profile?.ward_id) {
+        setPosts([]);
+        setLatestAlerts({});
+        return;
+      }
+
+      const postsData = await getRows('posts', {
+        filters: { ward_id: profile.ward_id },
+        order: [{ column: 'createdAt', ascending: false }],
+      });
+
+      const latestByType = ALERT_TYPES.reduce((acc, type) => {
+        acc[type] = postsData.find((post) => post.type === type)?.createdAt || null;
+        return acc;
+      }, {});
+      const crimeAlerts = postsData.filter(p => p.type === 'crime_alert');
+      const others = postsData.filter(p => p.type !== 'crime_alert');
+
+      setLatestAlerts(latestByType);
+      setPosts([...crimeAlerts, ...others]);
+    } catch (error) {
+      console.error('Error loading feed:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
     let unsubscribe;
@@ -25,47 +122,27 @@ export default function CommunityFeedScreen() {
     const load = async () => {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
+
+      let profile = null;
       if (currentUser) {
-        const profile = await getUserProfile(currentUser.id);
+        profile = await getUserProfile(currentUser.id);
         setUserProfile(profile);
         setUserRole(profile?.role || 'resident');
       }
-      await loadFeed();
-      unsubscribe = subscribeToFeed();
+
+      await fetchWardDetails(profile);
+      await loadFeed(profile);
+      unsubscribe = subscribeToTable('posts', () => loadFeed(profile));
     };
 
     load();
     return () => unsubscribe && unsubscribe();
+  }, [fetchWardDetails, loadFeed]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(timer);
   }, []);
-
-  const loadFeed = async () => {
-    try {
-      let postsData;
-      
-      // If user has a ward, only show posts from their ward
-      if (userProfile?.ward_id) {
-        postsData = await getRows('posts', {
-          filters: { ward_id: userProfile.ward_id },
-          order: [{ column: 'createdAt', ascending: false }],
-        });
-      } else {
-        // Fallback: show all posts if no ward assigned
-        postsData = await getRows('posts', {
-          order: [{ column: 'createdAt', ascending: false }],
-        });
-      }
-
-      const crimeAlerts = postsData.filter(p => p.type === 'crime_alert');
-      const others = postsData.filter(p => p.type !== 'crime_alert');
-      setPosts([...crimeAlerts, ...others]);
-    } catch (error) {
-      console.error('Error loading feed:', error);
-    }
-  };
-
-  const subscribeToFeed = () => {
-    return subscribeToTable('posts', loadFeed);
-  };
 
   const getCategoryIcon = (type) => {
     switch(type) {
@@ -130,6 +207,11 @@ export default function CommunityFeedScreen() {
       return;
     }
 
+    if (!userProfile?.ward_id) {
+      Alert.alert('Ward Required', 'Your profile needs a ward before you can create ward community posts.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       await insertRow('posts', {
@@ -161,6 +243,16 @@ export default function CommunityFeedScreen() {
     ? posts
     : posts.filter(post => post.type === selectedCategory);
 
+  const wardTitle = wardDetails?.wardNumber
+    ? `Ward ${wardDetails.wardNumber}`
+    : wardDetails?.wardId
+      ? `Ward ${wardDetails.wardId}`
+      : 'No ward assigned';
+
+  const wardLocation = [wardDetails?.suburbName, wardDetails?.cityName, wardDetails?.provinceName]
+    .filter(Boolean)
+    .join(' - ');
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -168,29 +260,40 @@ export default function CommunityFeedScreen() {
         {/* Header */}
         <View style={{ backgroundColor: colors.primary, padding: 20 }}>
           <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#fff' }}>Community Feed</Text>
-          {userProfile?.ward_number && (
-            <Text style={{ fontSize: 14, color: '#fff', opacity: 0.8 }}>
-              Ward {userProfile.ward_number} • {userProfile.suburb_name || 'Your Community'}
-            </Text>
-          )}
+          <Text style={{ fontSize: 14, color: '#fff', opacity: 0.8 }}>{wardTitle}</Text>
+          <Text style={{ fontSize: 12, color: '#fff', opacity: 0.7, marginTop: 4 }}>
+            {wardLocation || (wardDetails ? 'Your community updates' : 'Add your ward to see local updates')}
+          </Text>
         </View>
+
+        {/* <View style={{ marginHorizontal: 16, marginTop: 16, backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="location" size={18} color={colors.accent} />
+            <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 14 }}>{wardTitle}</Text>
+          </View>
+          <Text style={{ color: colors.textLight, fontSize: 12, marginTop: 6 }}>
+            {wardDetails
+              ? 'Feed and stats below are based only on posts for this ward.'
+              : 'Feed and stats are unavailable until your profile has a ward assigned.'}
+          </Text>
+        </View> */}
 
         {/* Stats row */}
         <View style={{ flexDirection: 'row', margin: 16, gap: 12 }}>
           <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
-            <Ionicons name="shield-checkmark" size={24} color={colors.accent} />
-            <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 4 }}>24/7</Text>
-            <Text style={{ fontSize: 12, color: colors.textLight }}>Community Alert</Text>
+            <Ionicons name="alert-circle" size={24} color={colors.error} />
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 4, color: colors.gradient2 }}>{getElapsedTime(latestAlerts.crime_alert, now)}</Text>
+            <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center' }}>Last Ward Crime Reported</Text>
           </View>
           <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
-            <Ionicons name="location" size={24} color={colors.accent} />
-            <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 4 }}>PinPoint</Text>
-            <Text style={{ fontSize: 12, color: colors.textLight }}>Digital Address</Text>
+            <Ionicons name="warning" size={24} color={colors.warning} />
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 4, color: colors.gradient2 }}>{getElapsedTime(latestAlerts.emergency_notice, now)}</Text>
+            <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center' }}>Last Ward Emergency Notice</Text>
           </View>
           <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
-            <Ionicons name="people" size={24} color={colors.accent} />
-            <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 4 }}>Active</Text>
-            <Text style={{ fontSize: 12, color: colors.textLight }}>Community</Text>
+            <Ionicons name="construct" size={24} color={colors.accent} />
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 4, color: colors.gradient2 }}>{getElapsedTime(latestAlerts.service_update, now)}</Text>
+            <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center' }}>Last Ward Service Update</Text>
           </View>
         </View>
 
@@ -248,7 +351,7 @@ export default function CommunityFeedScreen() {
         {/* Posts List */}
         <ScrollView
           style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadFeed} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadFeed(userProfile)} />}
         >
           {filteredPosts.length === 0 ? (
             <View style={{ padding: 40, alignItems: 'center' }}>
@@ -398,8 +501,10 @@ export default function CommunityFeedScreen() {
 
                   <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8 }}>Title</Text>
                   <TextInput
-                    style={{ backgroundColor: colors.background, borderRadius: 8, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: colors.border }}
+                    style={{ backgroundColor: colors.surfaceRaised, borderRadius: 8, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: colors.border, color: colors.text }}
                     placeholder="Post title"
+                    placeholderTextColor={colors.textLight}
+                    selectionColor={colors.accent}
                     value={newPost.title}
                     onChangeText={(text) => setNewPost({ ...newPost, title: text })}
                     returnKeyType="next"
@@ -407,8 +512,10 @@ export default function CommunityFeedScreen() {
 
                   <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8 }}>Description</Text>
                   <TextInput
-                    style={{ backgroundColor: colors.background, borderRadius: 8, padding: 12, marginBottom: 20, borderWidth: 1, borderColor: colors.border, minHeight: 100, textAlignVertical: 'top' }}
+                    style={{ backgroundColor: colors.surfaceRaised, borderRadius: 8, padding: 12, marginBottom: 20, borderWidth: 1, borderColor: colors.border, minHeight: 100, textAlignVertical: 'top', color: colors.text }}
                     placeholder="Post content..."
+                    placeholderTextColor={colors.textLight}
+                    selectionColor={colors.accent}
                     multiline
                     value={newPost.description}
                     onChangeText={(text) => setNewPost({ ...newPost, description: text })}

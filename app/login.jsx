@@ -184,6 +184,8 @@ export default function LoginScreen() {
               <TextInput
                 style={[inputStyle, { flex: 1 }]}
                 placeholder="81 234 5678"
+                placeholderTextColor={colors.textLight}
+                selectionColor={colors.accent}
                 value={phoneNumber}
                 onChangeText={setPhoneNumber}
                 keyboardType="phone-pad"
@@ -261,6 +263,7 @@ export default function LoginScreen() {
                   onChangeText={(val) => handleOtpChange(val, index)}
                   onKeyPress={(e) => handleOtpKeyPress(e, index)}
                   keyboardType="number-pad"
+                  selectionColor={colors.accent}
                   maxLength={6}
                   selectTextOnFocus
                   autoFocus={index === 0}
@@ -309,10 +312,11 @@ export default function LoginScreen() {
 }
 
 const inputStyle = {
-  backgroundColor: colors.surface,
+  backgroundColor: colors.surfaceRaised,
   borderRadius: 12,
   padding: 14,
   fontSize: 16,
   borderWidth: 1,
   borderColor: colors.border,
+  color: colors.text,
 };
