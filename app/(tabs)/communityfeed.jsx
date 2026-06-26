@@ -259,24 +259,12 @@ export default function CommunityFeedScreen() {
 
         {/* Header */}
         <View style={{ backgroundColor: colors.primary, padding: 20 }}>
-          <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#fff' }}>Community Feed</Text>
           <Text style={{ fontSize: 14, color: '#fff', opacity: 0.8 }}>{wardTitle}</Text>
           <Text style={{ fontSize: 12, color: '#fff', opacity: 0.7, marginTop: 4 }}>
             {wardLocation || (wardDetails ? 'Your community updates' : 'Add your ward to see local updates')}
           </Text>
         </View>
 
-        {/* <View style={{ marginHorizontal: 16, marginTop: 16, backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons name="location" size={18} color={colors.accent} />
-            <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 14 }}>{wardTitle}</Text>
-          </View>
-          <Text style={{ color: colors.textLight, fontSize: 12, marginTop: 6 }}>
-            {wardDetails
-              ? 'Feed and stats below are based only on posts for this ward.'
-              : 'Feed and stats are unavailable until your profile has a ward assigned.'}
-          </Text>
-        </View> */}
 
         {/* Stats row */}
         <View style={{ flexDirection: 'row', margin: 16, gap: 12 }}>

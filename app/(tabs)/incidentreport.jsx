@@ -15,12 +15,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getCurrentUser, getRows, insertRow, getUserProfile } from '../../config/supabase';
+import { uploadReportImages } from '../../config/mediaUpload';
 import colors from '../../Utils/colors';
 
 export default function IncidentReportScreen() {
-  const CLOUDINARY_CLOUD_NAME = 'dx0mmgase';
-  const CLOUDINARY_UPLOAD_PRESET = 'Comm-connect';
-
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
@@ -135,48 +133,6 @@ export default function IncidentReportScreen() {
     setImages(newImages);
   };
 
-  const uploadImages = async () => {
-    const uploadedUrls = [];
-
-    for (let i = 0; i < images.length; i++) {
-      try {
-        const uri = images[i];
-        const formData = new FormData();
-
-        formData.append('file', {
-          uri,
-          type: 'image/jpeg',
-          name: `report_${Date.now()}_${i}.jpg`
-        });
-
-        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
-        const response = await fetch(
-          `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-          {
-            method: 'POST',
-            body: formData
-          }
-        );
-
-        const data = await response.json();
-
-        console.log('Cloudinary response:', data);
-
-        if (data.secure_url) {
-          uploadedUrls.push(data.secure_url);
-        } else {
-          throw new Error(data.error?.message || 'No URL returned from Cloudinary');
-        }
-      } catch (error) {
-        console.error(`Failed to upload image ${i}:`, error);
-        throw error;
-      }
-    }
-
-    return uploadedUrls;
-  };
-
   const handleSubmitReport = async () => {
     console.log('=== SUBMIT DEBUG ===');
     console.log('reportType:', reportType);
@@ -244,7 +200,12 @@ export default function IncidentReportScreen() {
       let imageUrls = [];
 
       if (images.length > 0) {
-        imageUrls = await uploadImages();
+        try {
+          imageUrls = await uploadReportImages(images);
+        } catch (error) {
+          console.warn('Image upload deferred until sync:', error);
+          imageUrls = images;
+        }
       }
 
       // Submit report with ward_id and suburb_id

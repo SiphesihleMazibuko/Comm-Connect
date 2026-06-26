@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs, router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { getSupabaseClient, getUserProfile } from '../../config/supabase';
+import { getCurrentUser, getSupabaseClient, getUserProfile } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
 export default function TabLayout() {
@@ -45,7 +45,7 @@ export default function TabLayout() {
 
     const client = getSupabaseClient();
 
-    client.auth.getUser().then(({ data }) => loadUserRole(data.user));
+    getCurrentUser().then((currentUser) => loadUserRole(currentUser));
 
     const { data: authListener } = client.auth.onAuthStateChange((_event, session) => {
       loadUserRole(session?.user || null);
