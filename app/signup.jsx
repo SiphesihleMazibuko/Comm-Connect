@@ -1,8 +1,10 @@
 import { router } from 'expo-router';
+import * as Location from 'expo-location';
 import { useRef, useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -11,18 +13,29 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { getFriendlySupabaseError, getSupabaseClient, upsertRow } from '../config/supabase';
+import { getFriendlySupabaseError, getSupabaseClient, insertRow, upsertRow } from '../config/supabase';
+import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode } from '../Utils/countryCodes';
+import { buildOpenStreetMapAddressLabel, reverseGeocodeWithOpenStreetMap } from '../Utils/openStreetMapLocation';
 import colors from '../Utils/colors';
 
 const OTP_LENGTH = 6;
 
-const COUNTRY_CODES = [
-  { code: '+27', flag: '🇿🇦', name: 'ZA' },
-  { code: '+1',  flag: '🇺🇸', name: 'US' },
-  { code: '+44', flag: '🇬🇧', name: 'GB' },
-  { code: '+91', flag: '🇮🇳', name: 'IN' },
-  { code: '+61', flag: '🇦🇺', name: 'AU' },
-];
+const normalizeLocationText = (value = '') => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const findLocationMatch = (items, names) => {
+  const normalizedNames = names.filter(Boolean).map(normalizeLocationText);
+
+  return items.find((item) => {
+    const itemName = normalizeLocationText(item.name || '');
+    return normalizedNames.some((name) => itemName.includes(name) || name.includes(itemName));
+  });
+};
+
+const createPinPointAddress = (latitude, longitude) => {
+  const latHash = Math.abs(latitude).toFixed(4).replace('.', '');
+  const lngHash = Math.abs(longitude).toFixed(4).replace('.', '');
+  return `PIN-${latHash}-${lngHash}`;
+};
 
 export default function SignupScreen() {
   // Step management: 'details' → 'otp'
@@ -34,10 +47,17 @@ export default function SignupScreen() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
+  const [countryCodes, setCountryCodes] = useState(FALLBACK_COUNTRY_CODES);
+  const [selectedCountry, setSelectedCountry] = useState(getDefaultCountryCode());
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [loadingCountryCodes, setLoadingCountryCodes] = useState(false);
+  const countryCodesMountedRef = useRef(true);
   const [idNumber, setIdNumber] = useState('');
   const [location, setLocation] = useState('');
+  const [pinpointLocation, setPinpointLocation] = useState(null);
+  const [manualWardNumber, setManualWardNumber] = useState('');
+  const [detectingLocation, setDetectingLocation] = useState(false);
+  const [locationLookupStatus, setLocationLookupStatus] = useState('');
   const [organizationName, setOrganizationName] = useState('');
   const [responderType, setResponderType] = useState('');
 
@@ -59,8 +79,34 @@ export default function SignupScreen() {
 
   // ─── Load Provinces on Mount ────────────────────────────────────────────
   useEffect(() => {
+    countryCodesMountedRef.current = true;
+
     loadProvinces();
+    loadCountryCodes();
+
+    return () => {
+      countryCodesMountedRef.current = false;
+    };
   }, []);
+
+  const loadCountryCodes = async () => {
+    setLoadingCountryCodes(true);
+
+    try {
+      const apiCountryCodes = await fetchCountryCodes();
+      if (!countryCodesMountedRef.current || apiCountryCodes.length === 0) return;
+
+      setCountryCodes(apiCountryCodes);
+      setSelectedCountry((currentCountry) => (
+        apiCountryCodes.find((country) => country.code === currentCountry.code && country.name === currentCountry.name)
+        || getDefaultCountryCode(apiCountryCodes)
+      ));
+    } catch (error) {
+      console.error('Error loading country codes:', error);
+    } finally {
+      if (countryCodesMountedRef.current) setLoadingCountryCodes(false);
+    }
+  };
 
   const loadProvinces = async () => {
     try {
@@ -214,18 +260,144 @@ export default function SignupScreen() {
 
   const handleWardSelect = (ward) => {
     setSelectedWard(ward);
+    setManualWardNumber(String(ward.ward_number || ''));
   };
 
   // ─── Validate Location ──────────────────────────────────────────────────
   const validateLocation = () => {
-    const errors = {};
-    if (!selectedProvince) errors.province = 'Please select a province';
-    if (!selectedCity) errors.city = 'Please select a city';
-    if (!selectedSuburb) errors.suburb = 'Please select a suburb';
-    if (!selectedWard) errors.ward = 'Please select a ward number';
+    setLocationErrors({});
+    return true;
+  };
 
-    setLocationErrors(errors);
-    return Object.keys(errors).length === 0;
+  const applyLocationHierarchyFromGps = async (osmLocation) => {
+    const client = getSupabaseClient();
+    let availableProvinces = provinces;
+
+    if (availableProvinces.length === 0) {
+      const { data: fetchedProvinces, error: provinceError } = await client
+        .from('provinces')
+        .select('*')
+        .order('name');
+
+      if (provinceError) throw provinceError;
+      availableProvinces = fetchedProvinces || [];
+      setProvinces(availableProvinces);
+    }
+
+    const province = findLocationMatch(availableProvinces, [
+      osmLocation.province,
+      osmLocation.district,
+      osmLocation.cityTown,
+    ]);
+
+    if (!province) {
+      setLocationLookupStatus('Location saved. Select or enter your ward number if you know it.');
+      return;
+    }
+
+    setSelectedProvince(province);
+
+    const { data: provinceCities, error: cityError } = await client
+      .from('cities')
+      .select('*')
+      .eq('province_id', province.id)
+      .order('name');
+
+    if (cityError) throw cityError;
+    setCities(provinceCities || []);
+
+    const city = findLocationMatch(provinceCities || [], [
+      osmLocation.cityTown,
+      osmLocation.district,
+      osmLocation.suburb,
+    ]);
+
+    if (!city) {
+      setLocationLookupStatus('Province matched. Select or enter your ward number if you know it.');
+      return;
+    }
+
+    setSelectedCity(city);
+
+    const { data: citySuburbs, error: suburbError } = await client
+      .from('suburbs')
+      .select('*')
+      .eq('city_id', city.id)
+      .order('name');
+
+    if (suburbError) throw suburbError;
+    setSuburbs(citySuburbs || []);
+
+    const suburb = findLocationMatch(citySuburbs || [], [
+      osmLocation.suburb,
+      osmLocation.road,
+      osmLocation.cityTown,
+      osmLocation.district,
+    ]);
+
+    if (!suburb) {
+      setLocationLookupStatus('City matched. Select or enter your ward number if you know it.');
+      return;
+    }
+
+    setSelectedSuburb(suburb);
+
+    const { data: suburbZones, error: zoneError } = await client
+      .from('zones')
+      .select('*')
+      .eq('suburb_id', suburb.id)
+      .order('name');
+
+    if (!zoneError) setZones(suburbZones || []);
+
+    const { data: suburbWards, error: wardError } = await client
+      .from('wards')
+      .select('*')
+      .eq('suburb_id', suburb.id)
+      .order('ward_number');
+
+    if (wardError) throw wardError;
+
+    setWards(suburbWards || []);
+    setSelectedWard(null);
+
+    if (suburbWards?.length > 0) {
+      setLocationLookupStatus('Location matched. Select your ward from the list, or enter it manually if you are unsure.');
+    } else {
+      setLocationLookupStatus('Location matched. Enter your ward number manually if you know it.');
+    }
+  };
+
+  const handleUseCurrentLocation = async () => {
+    setDetectingLocation(true);
+    setLocationLookupStatus('');
+    setLocationErrors({});
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Allow location access so we can create your PinPoint address.');
+        return;
+      }
+
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Highest,
+      });
+      const { latitude, longitude } = currentLocation.coords;
+      const digitalAddress = createPinPointAddress(latitude, longitude);
+      const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+      const osmLocation = await reverseGeocodeWithOpenStreetMap(latitude, longitude);
+
+      setPinpointLocation({ latitude, longitude, digitalAddress, mapsUrl });
+      setLocation(buildOpenStreetMapAddressLabel(osmLocation, digitalAddress));
+      await applyLocationHierarchyFromGps(osmLocation);
+    } catch (error) {
+      console.error('Error detecting signup location:', error);
+      Alert.alert('Location Error', 'We could not detect your location. You can continue and add it later.');
+    } finally {
+      setDetectingLocation(false);
+    }
   };
 
   // ─── OTP state ──────────────────────────────────────────────────────────
@@ -260,15 +432,12 @@ export default function SignupScreen() {
       return;
     }
 
-    if (!firstName || !lastName || !email || !phoneNumber || !idNumber || !location) {
+    if (!firstName || !lastName || !email || !phoneNumber || !idNumber) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
 
-    if (!validateLocation()) {
-      Alert.alert('Error', 'Please complete your location details');
-      return;
-    }
+    validateLocation();
 
     if (selectedRole === 'community_leader' && !organizationName) {
       Alert.alert('Error', 'Please enter your community or organisation name');
@@ -356,7 +525,7 @@ export default function SignupScreen() {
         email,
         phoneNumber: fullPhoneNumber,
         idNumber,
-        location,
+        location: location || pinpointLocation?.digitalAddress || null,
         role: selectedRole,
         organizationName: selectedRole === 'community_leader' ? organizationName : null,
         responderType: selectedRole === 'emergency_responder' ? responderType : null,
@@ -369,6 +538,13 @@ export default function SignupScreen() {
         permissions: {
           locationEnabled: false,
           notificationsEnabled: false,
+          manualWardNumber: manualWardNumber.trim() || selectedWard?.ward_number || null,
+          pinpointAddress: pinpointLocation ? {
+            digitalAddress: pinpointLocation.digitalAddress,
+            latitude: pinpointLocation.latitude,
+            longitude: pinpointLocation.longitude,
+            mapsUrl: pinpointLocation.mapsUrl,
+          } : null,
           canReportIncident: true,
           canRequestEmergency: true,
           canReviewReports: selectedRole === 'community_leader',
@@ -378,6 +554,19 @@ export default function SignupScreen() {
         createdAt: new Date().toISOString(),
         isMockUser: false
       });
+
+      if (pinpointLocation) {
+        await insertRow('pinpoints', {
+          userId: data.user.id,
+          label: 'Home',
+          digitalAddress: pinpointLocation.digitalAddress,
+          latitude: pinpointLocation.latitude,
+          longitude: pinpointLocation.longitude,
+          mapsUrl: pinpointLocation.mapsUrl,
+          qrPayload: pinpointLocation.mapsUrl,
+          createdAt: new Date().toISOString(),
+        });
+      }
 
       Alert.alert(
         'Account Created Successfully!',
@@ -402,12 +591,55 @@ export default function SignupScreen() {
   const renderLocationSelector = () => (
     <View style={{ marginBottom: 16 }}>
       <Text style={labelStyle}>
-        📍 Your Location <Text style={{ color: colors.error }}>*</Text>
+        📍 Your Location
+      </Text>
+
+      <TouchableOpacity
+        onPress={handleUseCurrentLocation}
+        disabled={detectingLocation}
+        style={{
+          backgroundColor: colors.accent,
+          borderRadius: 12,
+          padding: 14,
+          alignItems: 'center',
+          marginBottom: 12,
+          opacity: detectingLocation ? 0.7 : 1,
+        }}
+      >
+        {detectingLocation ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={{ color: '#fff', fontWeight: 'bold' }}>Use My Current Location</Text>
+        )}
+      </TouchableOpacity>
+
+      {pinpointLocation && (
+        <View style={{
+          backgroundColor: colors.background,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: colors.border,
+          padding: 12,
+          marginBottom: 12,
+        }}>
+          <Text style={{ color: colors.textLight, fontSize: 12, marginBottom: 4 }}>PinPoint Address</Text>
+          <Text style={{ color: colors.accent, fontWeight: 'bold' }}>{pinpointLocation.digitalAddress}</Text>
+        </View>
+      )}
+
+      {locationLookupStatus ? (
+        <Text style={{ color: colors.textLight, fontSize: 12, marginBottom: 12 }}>
+          {locationLookupStatus}
+        </Text>
+      ) : null}
+
+      <Text style={{ color: colors.textLight, fontSize: 11, marginBottom: 12 }}>
+        Area details from OpenStreetMap. Ward number is selected or entered by you.
       </Text>
 
       {/* Province */}
       <View style={{ marginBottom: 12 }}>
-        <Text style={subLabelStyle}>Province *</Text>
+        <Text style={subLabelStyle}>Province (Optional)</Text>
         {loadingLocations && provinces.length === 0 ? (
           <ActivityIndicator color={colors.accent} />
         ) : (
@@ -444,7 +676,7 @@ export default function SignupScreen() {
       {/* City */}
       {selectedProvince && (
         <View style={{ marginBottom: 12 }}>
-          <Text style={subLabelStyle}>City / Town *</Text>
+          <Text style={subLabelStyle}>City / Town (Optional)</Text>
           {loadingLocations ? (
             <ActivityIndicator color={colors.accent} />
           ) : cities.length === 0 ? (
@@ -484,7 +716,7 @@ export default function SignupScreen() {
       {/* Suburb */}
       {selectedCity && (
         <View style={{ marginBottom: 12 }}>
-          <Text style={subLabelStyle}>Suburb *</Text>
+          <Text style={subLabelStyle}>Suburb (Optional)</Text>
           {loadingLocations ? (
             <ActivityIndicator color={colors.accent} />
           ) : suburbs.length === 0 ? (
@@ -555,7 +787,7 @@ export default function SignupScreen() {
       {/* Ward */}
       {selectedSuburb && (
         <View style={{ marginBottom: 12 }}>
-          <Text style={subLabelStyle}>Ward Number *</Text>
+          <Text style={subLabelStyle}>Ward Number (Optional)</Text>
           {loadingLocations ? (
             <ActivityIndicator color={colors.accent} />
           ) : wards.length === 0 ? (
@@ -592,6 +824,24 @@ export default function SignupScreen() {
         </View>
       )}
 
+      <View style={{ marginBottom: 12 }}>
+        <Text style={subLabelStyle}>Enter Ward Number (Optional)</Text>
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. 12"
+          placeholderTextColor={colors.textLight}
+          selectionColor={colors.accent}
+          value={manualWardNumber}
+          onChangeText={(value) => {
+            setManualWardNumber(value);
+            if (selectedWard && String(selectedWard.ward_number || '') !== value.trim()) {
+              setSelectedWard(null);
+            }
+          }}
+          keyboardType="numeric"
+        />
+      </View>
+
       {loadingLocations && (
         <View style={{ alignItems: 'center', marginVertical: 8 }}>
           <ActivityIndicator color={colors.accent} />
@@ -619,7 +869,8 @@ export default function SignupScreen() {
             alignItems: 'center',
             marginBottom: 16
           }}>
-            <Text style={{ fontSize: 40 }}>🤝</Text>
+            
+            <Image source={require('../assets/signup-removebg-preview.png')} style={{ width: 60, height: 60, top: 8 }} resizeMode="contain" />
           </View>
           <Text style={{ fontSize: 28, fontWeight: 'bold', color: colors.primary }}>
             {step === 'details' ? 'Create Account' : 'Verify Phone'}
@@ -709,7 +960,11 @@ export default function SignupScreen() {
                     >
                       <Text style={{ fontSize: 18 }}>{selectedCountry.flag}</Text>
                       <Text style={{ fontSize: 15, color: colors.text, fontWeight: '500' }}>{selectedCountry.code}</Text>
-                      <Text style={{ fontSize: 11, color: colors.textLight }}>▼</Text>
+                      {loadingCountryCodes ? (
+                        <ActivityIndicator size="small" color={colors.accent} />
+                      ) : (
+                        <Text style={{ fontSize: 11, color: colors.textLight }}>▼</Text>
+                      )}
                     </TouchableOpacity>
 
                     <TextInput
@@ -735,9 +990,9 @@ export default function SignupScreen() {
                     marginBottom: 12,
                     overflow: 'hidden',
                   }}>
-                    {COUNTRY_CODES.map((country) => (
+                    {countryCodes.map((country) => (
                       <TouchableOpacity
-                        key={country.code}
+                        key={`${country.name}-${country.code}`}
                         onPress={() => {
                           setSelectedCountry(country);
                           setShowCountryPicker(false);
@@ -749,13 +1004,13 @@ export default function SignupScreen() {
                           padding: 14,
                           borderBottomWidth: 0.5,
                           borderBottomColor: colors.border,
-                          backgroundColor: selectedCountry.code === country.code ? colors.background : 'transparent',
+                          backgroundColor: selectedCountry.code === country.code && selectedCountry.name === country.name ? colors.background : 'transparent',
                         }}
                       >
                         <Text style={{ fontSize: 20 }}>{country.flag}</Text>
-                        <Text style={{ fontSize: 15, color: colors.text }}>{country.name}</Text>
+                        <Text style={{ fontSize: 15, color: colors.text }}>{country.countryName || country.name}</Text>
                         <Text style={{ fontSize: 15, color: colors.textLight, marginLeft: 'auto' }}>{country.code}</Text>
-                        {selectedCountry.code === country.code && (
+                        {selectedCountry.code === country.code && selectedCountry.name === country.name && (
                           <Text style={{ color: colors.accent, fontSize: 16 }}>✓</Text>
                         )}
                       </TouchableOpacity>

@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,20 +14,15 @@ import {
 } from 'react-native';
 import { getFriendlySupabaseError, getSupabaseClient, getUserProfile } from '../config/supabase';
 import colors from '../Utils/colors';
-
-const COUNTRY_CODES = [
-  { code: '+27', flag: '🇿🇦', name: 'ZA' },
-  { code: '+1',  flag: '🇺🇸', name: 'US' },
-  { code: '+44', flag: '🇬🇧', name: 'GB' },
-  { code: '+91', flag: '🇮🇳', name: 'IN' },
-  { code: '+61', flag: '🇦🇺', name: 'AU' },
-];
+import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode } from '../Utils/countryCodes';
 
 const OTP_LENGTH = 6;
 
 export default function LoginScreen() {
-  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
+  const [countryCodes, setCountryCodes] = useState(FALLBACK_COUNTRY_CODES);
+  const [selectedCountry, setSelectedCountry] = useState(getDefaultCountryCode());
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [loadingCountryCodes, setLoadingCountryCodes] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''));
   const [verificationId, setVerificationId] = useState(null);
@@ -34,6 +30,35 @@ export default function LoginScreen() {
   const [step, setStep] = useState('phone');
 
   const otpRefs = useRef([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCountryCodes = async () => {
+      setLoadingCountryCodes(true);
+
+      try {
+        const apiCountryCodes = await fetchCountryCodes();
+        if (!isMounted || apiCountryCodes.length === 0) return;
+
+        setCountryCodes(apiCountryCodes);
+        setSelectedCountry((currentCountry) => (
+          apiCountryCodes.find((country) => country.code === currentCountry.code && country.name === currentCountry.name)
+          || getDefaultCountryCode(apiCountryCodes)
+        ));
+      } catch (error) {
+        console.error('Error loading country codes:', error);
+      } finally {
+        if (isMounted) setLoadingCountryCodes(false);
+      }
+    };
+
+    loadCountryCodes();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSendOTP = async () => {
     const cleaned = phoneNumber.trim().replace(/\s/g, '');
@@ -145,12 +170,11 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}>
         {/* Header */}
         <View style={{ alignItems: 'center', marginBottom: 48 }}>
-          <View style={{ width: 80, height: 80, backgroundColor: colors.primary, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-            <Text style={{ fontSize: 40 }}>🤝</Text>
-          </View>
-          <Text style={{ fontSize: 28, fontWeight: 'bold', color: colors.primary }}>Welcome Back</Text>
+         
+            <Image source={require('../assets/mat-removebg-preview.png')} style={{ width: 100, height: 100,  }} />
+          
           <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 8 }}>
-            {step === 'phone' ? 'Sign in with your phone number' : 'Enter the code sent to your phone'}
+            {step === 'phone' ? 'Log in with your phone number' : 'Enter the code sent to your phone'}
           </Text>
         </View>
 
@@ -177,7 +201,11 @@ export default function LoginScreen() {
               >
                 <Text style={{ fontSize: 18 }}>{selectedCountry.flag}</Text>
                 <Text style={{ fontSize: 15, color: colors.text, fontWeight: '500' }}>{selectedCountry.code}</Text>
-                <Text style={{ fontSize: 11, color: colors.textLight }}>▼</Text>
+                {loadingCountryCodes ? (
+                  <ActivityIndicator size="small" color={colors.accent} />
+                ) : (
+                  <Text style={{ fontSize: 11, color: colors.textLight }}>▼</Text>
+                )}
               </TouchableOpacity>
 
               {/* Number input */}
@@ -203,9 +231,9 @@ export default function LoginScreen() {
                 marginBottom: 12,
                 overflow: 'hidden',
               }}>
-                {COUNTRY_CODES.map((country) => (
+                {countryCodes.map((country) => (
                   <TouchableOpacity
-                    key={country.code}
+                    key={`${country.name}-${country.code}`}
                     onPress={() => {
                       setSelectedCountry(country);
                       setShowCountryPicker(false);
@@ -217,13 +245,13 @@ export default function LoginScreen() {
                       padding: 14,
                       borderBottomWidth: 0.5,
                       borderBottomColor: colors.border,
-                      backgroundColor: selectedCountry.code === country.code ? colors.background : 'transparent',
+                      backgroundColor: selectedCountry.code === country.code && selectedCountry.name === country.name ? colors.background : 'transparent',
                     }}
                   >
                     <Text style={{ fontSize: 20 }}>{country.flag}</Text>
-                    <Text style={{ fontSize: 15, color: colors.text }}>{country.name}</Text>
+                    <Text style={{ fontSize: 15, color: colors.text }}>{country.countryName || country.name}</Text>
                     <Text style={{ fontSize: 15, color: colors.textLight, marginLeft: 'auto' }}>{country.code}</Text>
-                    {selectedCountry.code === country.code && (
+                    {selectedCountry.code === country.code && selectedCountry.name === country.name && (
                       <Text style={{ color: colors.accent, fontSize: 16 }}>✓</Text>
                     )}
                   </TouchableOpacity>

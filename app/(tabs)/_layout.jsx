@@ -51,7 +51,9 @@ export default function TabLayout() {
       loadUserRole(session?.user || null);
     });
 
-    return () => authListener.subscription.unsubscribe();
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   if (loading || !role) {

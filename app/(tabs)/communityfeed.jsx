@@ -270,17 +270,17 @@ export default function CommunityFeedScreen() {
         <View style={{ flexDirection: 'row', margin: 16, gap: 12 }}>
           <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
             <Ionicons name="alert-circle" size={24} color={colors.error} />
-            <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 4, color: colors.gradient2 }}>{getElapsedTime(latestAlerts.crime_alert, now)}</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', marginTop: 4, color: colors.gradient2 }}>{getElapsedTime(latestAlerts.crime_alert, now)}</Text>
             <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center' }}>Last Ward Crime Reported</Text>
           </View>
           <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
             <Ionicons name="warning" size={24} color={colors.warning} />
-            <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 4, color: colors.gradient2 }}>{getElapsedTime(latestAlerts.emergency_notice, now)}</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', marginTop: 4, color: colors.gradient2 }}>{getElapsedTime(latestAlerts.emergency_notice, now)}</Text>
             <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center' }}>Last Ward Emergency Notice</Text>
           </View>
           <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
             <Ionicons name="construct" size={24} color={colors.accent} />
-            <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 4, color: colors.gradient2 }}>{getElapsedTime(latestAlerts.service_update, now)}</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', marginTop: 4, color: colors.gradient2 }}>{getElapsedTime(latestAlerts.service_update, now)}</Text>
             <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center' }}>Last Ward Service Update</Text>
           </View>
         </View>
@@ -428,7 +428,7 @@ export default function CommunityFeedScreen() {
                     {post.description}
                   </Text>
 
-                  <View style={{ flexDirection: 'row', gap: 16, marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+                  {/* <View style={{ flexDirection: 'row', gap: 16, marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
                     <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                       <Ionicons name="share-outline" size={18} color={colors.textLight} />
                       <Text style={{ fontSize: 12, color: colors.textLight }}>Share</Text>
@@ -437,7 +437,7 @@ export default function CommunityFeedScreen() {
                       <Ionicons name="bookmark-outline" size={18} color={colors.textLight} />
                       <Text style={{ fontSize: 12, color: colors.textLight }}>Save</Text>
                     </TouchableOpacity>
-                  </View>
+                  </View> */}
                 </View>
               );
             })
