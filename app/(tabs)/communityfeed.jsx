@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import colors from '../../Utils/colors';
-import { deleteRow, getCurrentUser, getRows, getUserProfile, insertRow, subscribeToTable } from '../../config/supabase';
+import { getCurrentUser, getRows, getUserProfile, insertRow, subscribeToTable, updateRow } from '../../config/supabase';
 
 const ALERT_TYPES = ['crime_alert', 'emergency_notice', 'service_update'];
 
@@ -34,7 +34,7 @@ export default function CommunityFeedScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [newPost, setNewPost] = useState({ title: '', description: '', type: 'crime_alert' });
   const [submitting, setSubmitting] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
+  const [archivingId, setArchivingId] = useState(null);
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [wardDetails, setWardDetails] = useState(null);
@@ -95,17 +95,20 @@ export default function CommunityFeedScreen() {
         return;
       }
 
+      const canViewArchive = profile?.role === 'community_leader' || profile?.role === 'leader';
       const postsData = await getRows('posts', {
         filters: { ward_id: profile.ward_id },
         order: [{ column: 'createdAt', ascending: false }],
       });
+      const activePosts = postsData.filter((post) => post.status !== 'archived');
+      const visiblePosts = canViewArchive ? postsData : activePosts;
 
       const latestByType = ALERT_TYPES.reduce((acc, type) => {
-        acc[type] = postsData.find((post) => post.type === type)?.createdAt || null;
+        acc[type] = activePosts.find((post) => post.type === type)?.createdAt || null;
         return acc;
       }, {});
-      const crimeAlerts = postsData.filter(p => p.type === 'crime_alert');
-      const others = postsData.filter(p => p.type !== 'crime_alert');
+      const crimeAlerts = visiblePosts.filter(p => p.type === 'crime_alert');
+      const others = visiblePosts.filter(p => p.type !== 'crime_alert');
 
       setLatestAlerts(latestByType);
       setPosts([...crimeAlerts, ...others]);
@@ -171,24 +174,26 @@ export default function CommunityFeedScreen() {
     }
   };
 
-  const handleDeletePost = (post) => {
+  const handleArchivePost = (post) => {
     Alert.alert(
-      'Delete Post',
-      `Are you sure you want to delete "${post.title}"? This cannot be undone.`,
+      'Archive Post',
+      `Archive "${post.title}"? Residents will no longer see it in the community feed.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
-          style: 'destructive',
+          text: 'Archive',
           onPress: async () => {
-            setDeletingId(post.id);
+            setArchivingId(post.id);
             try {
-              await deleteRow('posts', post.id);
+              const archivedPost = await updateRow('posts', post.id, { status: 'archived' });
+              setPosts((currentPosts) => currentPosts.map((currentPost) => (
+                currentPost.id === post.id ? { ...currentPost, ...archivedPost } : currentPost
+              )));
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete post. Please try again.');
-              console.error('Error deleting post:', error);
+              Alert.alert('Error', 'Failed to archive post. Please try again.');
+              console.error('Error archiving post:', error);
             } finally {
-              setDeletingId(null);
+              setArchivingId(null);
             }
           },
         },
@@ -214,7 +219,7 @@ export default function CommunityFeedScreen() {
 
     setSubmitting(true);
     try {
-      await insertRow('posts', {
+      const createdPost = await insertRow('posts', {
         type: newPost.type,
         title: newPost.title,
         description: newPost.description,
@@ -228,6 +233,16 @@ export default function CommunityFeedScreen() {
         suburb_id: userProfile?.suburb_id || null,
       });
 
+      setPosts((currentPosts) => {
+        const nextPosts = [createdPost, ...currentPosts.filter((post) => post.id !== createdPost.id)];
+        const crimeAlerts = nextPosts.filter(p => p.type === 'crime_alert');
+        const others = nextPosts.filter(p => p.type !== 'crime_alert');
+        return [...crimeAlerts, ...others];
+      });
+      setLatestAlerts((currentAlerts) => ({
+        ...currentAlerts,
+        [createdPost.type]: createdPost.createdAt,
+      }));
       Alert.alert('Success', 'Post created successfully');
       setModalVisible(false);
       setNewPost({ title: '', description: '', type: 'crime_alert' });
@@ -239,9 +254,13 @@ export default function CommunityFeedScreen() {
     }
   };
 
-  const filteredPosts = selectedCategory === 'all'
-    ? posts
-    : posts.filter(post => post.type === selectedCategory);
+  const activePosts = posts.filter((post) => post.status !== 'archived');
+  const archivedPosts = isLeader ? posts.filter((post) => post.status === 'archived') : [];
+  const filteredPosts = selectedCategory === 'archive'
+    ? archivedPosts
+    : selectedCategory === 'all'
+      ? activePosts
+      : activePosts.filter(post => post.type === selectedCategory);
 
   const wardTitle = wardDetails?.wardNumber
     ? `Ward ${wardDetails.wardNumber}`
@@ -292,7 +311,7 @@ export default function CommunityFeedScreen() {
           contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center', gap: 10 }}
           style={{ maxHeight: 52, marginBottom: 4 }}
         >
-          {['all', 'crime_alert', 'emergency_notice', 'service_update'].map((category) => (
+          {['all', 'crime_alert', 'emergency_notice', 'service_update', ...(isLeader ? ['archive'] : [])].map((category) => (
             <TouchableOpacity
               key={category}
               style={{
@@ -314,12 +333,12 @@ export default function CommunityFeedScreen() {
               onPress={() => setSelectedCategory(category)}
             >
               <Ionicons
-                name={category === 'all' ? 'apps' : getCategoryIcon(category)}
+                name={category === 'all' ? 'apps' : category === 'archive' ? 'archive' : getCategoryIcon(category)}
                 size={13}
-                color={selectedCategory === category ? '#fff' : getCategoryColor(category)}
+                color={selectedCategory === category ? '#fff' : category === 'archive' ? colors.textLight : getCategoryColor(category)}
               />
               <Text style={{ color: selectedCategory === category ? '#fff' : colors.text, fontWeight: '600', fontSize: 13 }}>
-                {category === 'all' ? 'All' : getCategoryLabel(category)}
+                {category === 'all' ? 'All' : category === 'archive' ? 'Archive' : getCategoryLabel(category)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -345,13 +364,16 @@ export default function CommunityFeedScreen() {
             <View style={{ padding: 40, alignItems: 'center' }}>
               <Ionicons name="newspaper-outline" size={60} color={colors.textLight} />
               <Text style={{ color: colors.textLight, marginTop: 10, textAlign: 'center' }}>
-                No posts in your ward yet. Check back later for community updates.
+                {selectedCategory === 'archive'
+                  ? 'No archived posts in your ward yet.'
+                  : 'No posts in your ward yet. Check back later for community updates.'}
               </Text>
             </View>
           ) : (
             filteredPosts.map((post) => {
               const isCrimeAlert = post.type === 'crime_alert';
-              const isDeleting = deletingId === post.id;
+              const isArchiving = archivingId === post.id;
+              const isArchived = post.status === 'archived';
 
               return (
                 <View
@@ -368,7 +390,7 @@ export default function CommunityFeedScreen() {
                     shadowOpacity: isCrimeAlert ? 0.15 : 0.05,
                     shadowRadius: isCrimeAlert ? 6 : 2,
                     shadowOffset: { width: 0, height: 2 },
-                    opacity: isDeleting ? 0.5 : 1,
+                    opacity: isArchiving ? 0.5 : 1,
                   }}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
@@ -399,22 +421,28 @@ export default function CommunityFeedScreen() {
                         </View>
                       )}
 
-                      {isLeader && (
+                      {isArchived && (
+                        <View style={{ backgroundColor: colors.textLight + '18', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
+                          <Text style={{ color: colors.textLight, fontSize: 10, fontWeight: 'bold' }}>ARCHIVED</Text>
+                        </View>
+                      )}
+
+                      {isLeader && !isArchived && (
                         <TouchableOpacity
-                          onPress={() => handleDeletePost(post)}
-                          disabled={isDeleting}
+                          onPress={() => handleArchivePost(post)}
+                          disabled={isArchiving}
                           style={{
                             width: 32,
                             height: 32,
                             borderRadius: 16,
-                            backgroundColor: colors.error + '18',
+                            backgroundColor: colors.warning + '18',
                             justifyContent: 'center',
                             alignItems: 'center',
                           }}
                         >
-                          {isDeleting
-                            ? <ActivityIndicator size="small" color={colors.error} />
-                            : <Ionicons name="trash-outline" size={16} color={colors.error} />
+                          {isArchiving
+                            ? <ActivityIndicator size="small" color={colors.warning} />
+                            : <Ionicons name="archive-outline" size={16} color={colors.warning} />
                           }
                         </TouchableOpacity>
                       )}
@@ -427,17 +455,6 @@ export default function CommunityFeedScreen() {
                   <Text style={{ fontSize: 14, color: colors.textLight, marginBottom: 12 }}>
                     {post.description}
                   </Text>
-
-                  {/* <View style={{ flexDirection: 'row', gap: 16, marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
-                    <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                      <Ionicons name="share-outline" size={18} color={colors.textLight} />
-                      <Text style={{ fontSize: 12, color: colors.textLight }}>Share</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                      <Ionicons name="bookmark-outline" size={18} color={colors.textLight} />
-                      <Text style={{ fontSize: 12, color: colors.textLight }}>Save</Text>
-                    </TouchableOpacity>
-                  </View> */}
                 </View>
               );
             })
@@ -465,7 +482,7 @@ export default function CommunityFeedScreen() {
                 <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 16, color: colors.primary }}>Create Post</Text>
 
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8 }}>Category</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: colors.text }}>Category</Text>
                   <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
                     {['crime_alert', 'emergency_notice', 'service_update'].map((type) => (
                       <TouchableOpacity
@@ -487,7 +504,7 @@ export default function CommunityFeedScreen() {
                     ))}
                   </View>
 
-                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8 }}>Title</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: colors.text }}>Title</Text>
                   <TextInput
                     style={{ backgroundColor: colors.surfaceRaised, borderRadius: 8, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: colors.border, color: colors.text }}
                     placeholder="Post title"
@@ -498,7 +515,7 @@ export default function CommunityFeedScreen() {
                     returnKeyType="next"
                   />
 
-                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8 }}>Description</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: colors.text }}>Description</Text>
                   <TextInput
                     style={{ backgroundColor: colors.surfaceRaised, borderRadius: 8, padding: 12, marginBottom: 20, borderWidth: 1, borderColor: colors.border, minHeight: 100, textAlignVertical: 'top', color: colors.text }}
                     placeholder="Post content..."

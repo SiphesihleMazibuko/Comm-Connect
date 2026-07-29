@@ -47,6 +47,7 @@ export default function PinPointScreen() {
   const sosAlertIdRef = useRef(null);
   const sosLocationHistoryRef = useRef([]);
   const sosLocationMetaRef = useRef({});
+  const locationRequestRef = useRef(0);
 
   useEffect(() => {
     const load = async () => {
@@ -68,6 +69,8 @@ export default function PinPointScreen() {
   }, []);
 
   const getCurrentLocation = async () => {
+    const requestId = locationRequestRef.current + 1;
+    locationRequestRef.current = requestId;
     setLoading(true);
 
     try {
@@ -90,6 +93,8 @@ export default function PinPointScreen() {
 
       const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
 
+      if (locationRequestRef.current !== requestId) return;
+
       setLocation({
         latitude,
         longitude,
@@ -101,8 +106,18 @@ export default function PinPointScreen() {
       Alert.alert('Error', 'Failed to get location');
       console.error('Location error:', error);
     } finally {
-      setLoading(false);
+      if (locationRequestRef.current === requestId) {
+        setLoading(false);
+      }
     }
+  };
+
+  const cancelCurrentLocation = () => {
+    locationRequestRef.current += 1;
+    setLoading(false);
+    setLocation(null);
+    setDigitalAddress('');
+    setAddressLabel('');
   };
 
   const saveAddress = async () => {
@@ -415,6 +430,17 @@ export default function PinPointScreen() {
             )}
           </TouchableOpacity>
 
+          {loading && (
+            <TouchableOpacity
+              style={{ borderColor: colors.border, borderRadius: 12, borderWidth: 1, padding: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 12 }}
+              onPress={cancelCurrentLocation}
+              disabled={saving}
+            >
+              <Ionicons name="close-circle-outline" size={20} color={colors.text} />
+              <Text style={{ color: colors.text, fontWeight: 'bold' }}>Cancel</Text>
+            </TouchableOpacity>
+          )}
+
           {digitalAddress !== '' && (
             <View style={{ marginTop: 16 }}>
               <Text style={{ fontSize: 14, color: colors.textLight, marginBottom: 5 }}>Your Digital Address:</Text>
@@ -434,17 +460,28 @@ export default function PinPointScreen() {
                 onChangeText={setAddressLabel}
               />
 
-              <TouchableOpacity
-                style={{ backgroundColor: colors.primary, borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 12 }}
-                onPress={saveAddress}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>Save Address</Text>
-                )}
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                <TouchableOpacity
+                  style={{ flex: 1, borderColor: colors.border, borderRadius: 12, borderWidth: 1, padding: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                  onPress={cancelCurrentLocation}
+                  disabled={saving}
+                >
+                  <Ionicons name="close-circle-outline" size={20} color={colors.text} />
+                  <Text style={{ color: colors.text, fontWeight: 'bold' }}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 12, padding: 14, alignItems: 'center' }}
+                  onPress={saveAddress}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Save Address</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         </View>

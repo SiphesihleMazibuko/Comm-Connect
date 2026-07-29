@@ -96,8 +96,13 @@ create table if not exists public.posts (
   "createdAt" timestamptz not null default now(),
   status text not null default 'approved',
   priority text not null default 'normal',
-  "sourceReportId" uuid
+  "sourceReportId" uuid,
+  "archivedAt" timestamptz,
+  "archivedBy" uuid references auth.users(id) on delete set null
 );
+
+alter table public.posts add column if not exists "archivedAt" timestamptz;
+alter table public.posts add column if not exists "archivedBy" uuid references auth.users(id) on delete set null;
 
 alter table public.posts enable row level security;
 
@@ -106,7 +111,15 @@ create policy "Authenticated users can read posts"
 on public.posts
 for select
 to authenticated
-using (true);
+using (
+  coalesce(status, 'approved') <> 'archived'
+  or exists (
+    select 1
+    from public.users
+    where users.id = auth.uid()
+      and users.role in ('community_leader', 'leader')
+  )
+);
 
 drop policy if exists "Authenticated users can create posts" on public.posts;
 create policy "Authenticated users can create posts"
@@ -116,19 +129,42 @@ to authenticated
 with check (true);
 
 drop policy if exists "Authenticated users can update posts" on public.posts;
-create policy "Authenticated users can update posts"
+drop policy if exists "Community leaders can update posts" on public.posts;
+create policy "Community leaders can update posts"
 on public.posts
 for update
 to authenticated
-using (true)
-with check (true);
+using (
+  exists (
+    select 1
+    from public.users
+    where users.id = auth.uid()
+      and users.role in ('community_leader', 'leader')
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.users
+    where users.id = auth.uid()
+      and users.role in ('community_leader', 'leader')
+  )
+);
 
 drop policy if exists "Authenticated users can delete posts" on public.posts;
-create policy "Authenticated users can delete posts"
+drop policy if exists "Only community leaders can delete posts" on public.posts;
+create policy "Only community leaders can delete posts"
 on public.posts
 for delete
 to authenticated
-using (true);
+using (
+  exists (
+    select 1
+    from public.users
+    where users.id = auth.uid()
+      and users.role in ('community_leader', 'leader')
+  )
+);
 
 create table if not exists public.reports (
   id uuid primary key default gen_random_uuid(),

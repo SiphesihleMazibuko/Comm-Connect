@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { getFriendlySupabaseError, getSupabaseClient, getUserProfile } from '../config/supabase';
 import colors from '../Utils/colors';
-import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode } from '../Utils/countryCodes';
+import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode, searchCountryCodes } from '../Utils/countryCodes';
 
 const OTP_LENGTH = 6;
 
@@ -23,6 +23,7 @@ export default function LoginScreen() {
   const [selectedCountry, setSelectedCountry] = useState(getDefaultCountryCode());
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [loadingCountryCodes, setLoadingCountryCodes] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''));
   const [verificationId, setVerificationId] = useState(null);
@@ -30,6 +31,7 @@ export default function LoginScreen() {
   const [step, setStep] = useState('phone');
 
   const otpRefs = useRef([]);
+  const filteredCountryCodes = searchCountryCodes(countryCodes, countrySearch);
 
   useEffect(() => {
     let isMounted = true;
@@ -83,6 +85,17 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleCountryPicker = () => {
+    if (showCountryPicker) setCountrySearch('');
+    setShowCountryPicker(!showCountryPicker);
+  };
+
+  const handleCountrySelect = (country) => {
+    setSelectedCountry(country);
+    setCountrySearch('');
+    setShowCountryPicker(false);
   };
 
   const handleOtpChange = (value, index) => {
@@ -186,7 +199,7 @@ export default function LoginScreen() {
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
               {/* Country code button */}
               <TouchableOpacity
-                onPress={() => setShowCountryPicker(!showCountryPicker)}
+                onPress={toggleCountryPicker}
                 style={{
                   backgroundColor: colors.surface,
                   borderRadius: 12,
@@ -231,13 +244,32 @@ export default function LoginScreen() {
                 marginBottom: 12,
                 overflow: 'hidden',
               }}>
-                {countryCodes.map((country) => (
+                <TextInput
+                  style={{
+                    backgroundColor: colors.surfaceRaised,
+                    borderRadius: 10,
+                    padding: 12,
+                    margin: 10,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  }}
+                  placeholder="Search country or code"
+                  placeholderTextColor={colors.textLight}
+                  selectionColor={colors.accent}
+                  value={countrySearch}
+                  onChangeText={setCountrySearch}
+                  autoCapitalize="none"
+                />
+
+                {filteredCountryCodes.length === 0 ? (
+                  <Text style={{ color: colors.textLight, padding: 14, textAlign: 'center' }}>
+                    No countries found
+                  </Text>
+                ) : filteredCountryCodes.map((country) => (
                   <TouchableOpacity
                     key={`${country.name}-${country.code}`}
-                    onPress={() => {
-                      setSelectedCountry(country);
-                      setShowCountryPicker(false);
-                    }}
+                    onPress={() => handleCountrySelect(country)}
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',

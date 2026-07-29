@@ -14,6 +14,20 @@ export const getDefaultCountryCode = (countryCodes = FALLBACK_COUNTRY_CODES) => 
   return countryCodes.find((country) => country.name === 'ZA') || countryCodes[0] || FALLBACK_COUNTRY_CODES[0];
 };
 
+export const searchCountryCodes = (countryCodes, query) => {
+  const searchTerm = query.trim().toLowerCase();
+
+  if (!searchTerm) return countryCodes;
+
+  return countryCodes.filter((country) => (
+    [
+      country.countryName,
+      country.name,
+      country.code,
+    ].filter(Boolean).some((value) => String(value).toLowerCase().includes(searchTerm))
+  ));
+};
+
 export const fetchCountryCodes = async () => {
   if (!REST_COUNTRIES_API_KEY) {
     throw new Error('Missing Rest Countries API key.');

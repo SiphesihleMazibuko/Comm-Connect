@@ -90,8 +90,9 @@ export default function HomeScreen() {
       };
 
       const posts = await getRows('posts', options);
+      const activePosts = posts.filter((post) => post.status !== 'archived');
       const latestByType = ALERT_TYPES.reduce((acc, type) => {
-        acc[type] = posts.find((post) => post.type === type)?.createdAt || null;
+        acc[type] = activePosts.find((post) => post.type === type)?.createdAt || null;
         return acc;
       }, {});
 

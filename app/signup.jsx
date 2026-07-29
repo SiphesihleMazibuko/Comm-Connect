@@ -1,20 +1,20 @@
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
-import { useRef, useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   Text,
-  TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
+import SignupDetailsStep from '../components/signup/SignupDetailsStep';
+import SignupHeader from '../components/signup/SignupHeader';
+import SignupOtpStep from '../components/signup/SignupOtpStep';
 import { getFriendlySupabaseError, getSupabaseClient, insertRow, upsertRow } from '../config/supabase';
-import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode } from '../Utils/countryCodes';
+import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode, searchCountryCodes } from '../Utils/countryCodes';
 import { buildOpenStreetMapAddressLabel, reverseGeocodeWithOpenStreetMap } from '../Utils/openStreetMapLocation';
 import colors from '../Utils/colors';
 
@@ -38,7 +38,7 @@ const createPinPointAddress = (latitude, longitude) => {
 };
 
 export default function SignupScreen() {
-  // Step management: 'details' → 'otp'
+  // Step management: 'details' to 'otp'
   const [step, setStep] = useState('details');
 
   // Form fields
@@ -51,6 +51,7 @@ export default function SignupScreen() {
   const [selectedCountry, setSelectedCountry] = useState(getDefaultCountryCode());
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [loadingCountryCodes, setLoadingCountryCodes] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
   const countryCodesMountedRef = useRef(true);
   const [idNumber, setIdNumber] = useState('');
   const [location, setLocation] = useState('');
@@ -61,7 +62,7 @@ export default function SignupScreen() {
   const [organizationName, setOrganizationName] = useState('');
   const [responderType, setResponderType] = useState('');
 
-  // ─── Location Hierarchy States ────────────────────────────────────
+  // --- Location Hierarchy States ------------------------------------
   const [provinces, setProvinces] = useState([]);
   const [cities, setCities] = useState([]);
   const [suburbs, setSuburbs] = useState([]);
@@ -76,8 +77,9 @@ export default function SignupScreen() {
 
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [locationErrors, setLocationErrors] = useState({});
+  const filteredCountryCodes = searchCountryCodes(countryCodes, countrySearch);
 
-  // ─── Load Provinces on Mount ────────────────────────────────────────────
+  // --- Load Provinces on Mount --------------------------------------------
   useEffect(() => {
     countryCodesMountedRef.current = true;
 
@@ -108,6 +110,17 @@ export default function SignupScreen() {
     }
   };
 
+  const toggleCountryPicker = () => {
+    if (showCountryPicker) setCountrySearch('');
+    setShowCountryPicker(!showCountryPicker);
+  };
+
+  const handleCountrySelect = (country) => {
+    setSelectedCountry(country);
+    setCountrySearch('');
+    setShowCountryPicker(false);
+  };
+
   const loadProvinces = async () => {
     try {
       setLoadingLocations(true);
@@ -118,7 +131,7 @@ export default function SignupScreen() {
         .order('name');
 
       if (error) throw error;
-      console.log('✅ Provinces loaded:', data?.length || 0);
+      console.log('Provinces loaded:', data?.length || 0);
       setProvinces(data || []);
     } catch (error) {
       console.error('Error loading provinces:', error);
@@ -139,7 +152,7 @@ export default function SignupScreen() {
         .order('name');
 
       if (error) throw error;
-      console.log('✅ Cities loaded:', data?.length || 0);
+      console.log('Cities loaded:', data?.length || 0);
       setCities(data || []);
       setSelectedCity(null);
       setSuburbs([]);
@@ -164,7 +177,7 @@ export default function SignupScreen() {
         .order('name');
 
       if (error) throw error;
-      console.log('✅ Suburbs loaded:', data?.length || 0);
+      console.log('Suburbs loaded:', data?.length || 0);
       setSuburbs(data || []);
       setSelectedSuburb(null);
       setZones([]);
@@ -188,7 +201,7 @@ export default function SignupScreen() {
         .order('name');
 
       if (error) throw error;
-      console.log('✅ Zones loaded:', data?.length || 0);
+      console.log('Zones loaded:', data?.length || 0);
       setZones(data || []);
       setSelectedZone(null);
     } catch (error) {
@@ -209,7 +222,7 @@ export default function SignupScreen() {
         .order('ward_number');
 
       if (error) throw error;
-      console.log('✅ Wards loaded:', data?.length || 0);
+      console.log('Wards loaded:', data?.length || 0);
       setWards(data || []);
       setSelectedWard(null);
     } catch (error) {
@@ -219,7 +232,7 @@ export default function SignupScreen() {
     }
   };
 
-  // ─── Location Selection Handlers ──────────────────────────────────────
+  // --- Location Selection Handlers --------------------------------------
   const handleProvinceSelect = (province) => {
     setSelectedProvince(province);
     setSelectedCity(null);
@@ -263,7 +276,7 @@ export default function SignupScreen() {
     setManualWardNumber(String(ward.ward_number || ''));
   };
 
-  // ─── Validate Location ──────────────────────────────────────────────────
+  // --- Validate Location --------------------------------------------------
   const validateLocation = () => {
     setLocationErrors({});
     return true;
@@ -400,7 +413,7 @@ export default function SignupScreen() {
     }
   };
 
-  // ─── OTP state ──────────────────────────────────────────────────────────
+  // --- OTP state ----------------------------------------------------------
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''));
   const [verificationId, setVerificationId] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -425,7 +438,7 @@ export default function SignupScreen() {
     }
   ];
 
-  // ─── Send OTP ──────────────────────────────────────────────────────────
+  // --- Send OTP ----------------------------------------------------------
   const handleSendOTP = async () => {
     if (!selectedRole) {
       Alert.alert('Error', 'Please select an account type');
@@ -466,7 +479,7 @@ export default function SignupScreen() {
     }
   };
 
-  // ─── OTP Input Handlers ──────────────────────────────────────────────────
+  // --- OTP Input Handlers --------------------------------------------------
   const handleOtpChange = (value, index) => {
     if (!/^\d*$/.test(value)) return;
 
@@ -497,7 +510,7 @@ export default function SignupScreen() {
     }
   };
 
-  // ─── Verify OTP & Create Account ──────────────────────────────────────
+  // --- Verify OTP & Create Account --------------------------------------
   const handleVerifyAndCreate = async () => {
     const otpString = otp.join('');
     if (otpString.length < OTP_LENGTH) {
@@ -529,7 +542,7 @@ export default function SignupScreen() {
         role: selectedRole,
         organizationName: selectedRole === 'community_leader' ? organizationName : null,
         responderType: selectedRole === 'emergency_responder' ? responderType : null,
-        // ─── Location IDs ──────────────────────────────────────────────────
+        // --- Location IDs --------------------------------------------------
         province_id: selectedProvince?.id || null,
         city_id: selectedCity?.id || null,
         suburb_id: selectedSuburb?.id || null,
@@ -587,591 +600,96 @@ export default function SignupScreen() {
     }
   };
 
-  // ─── Render Location Selector ──────────────────────────────────────────
-  const renderLocationSelector = () => (
-    <View style={{ marginBottom: 16 }}>
-      <Text style={labelStyle}>
-        📍 Your Location
-      </Text>
+  // --- Render -------------------------------------------------------------
+  const handleOtpBack = () => {
+    setStep('details');
+    setOtp(Array(OTP_LENGTH).fill(''));
+  };
 
-      <TouchableOpacity
-        onPress={handleUseCurrentLocation}
-        disabled={detectingLocation}
-        style={{
-          backgroundColor: colors.accent,
-          borderRadius: 12,
-          padding: 14,
-          alignItems: 'center',
-          marginBottom: 12,
-          opacity: detectingLocation ? 0.7 : 1,
-        }}
-      >
-        {detectingLocation ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={{ color: '#fff', fontWeight: 'bold' }}>Use My Current Location</Text>
-        )}
-      </TouchableOpacity>
+  const locationSelectorProps = {
+    detectingLocation,
+    pinpointLocation,
+    locationLookupStatus,
+    loadingLocations,
+    provinces,
+    cities,
+    suburbs,
+    zones,
+    wards,
+    selectedProvince,
+    selectedCity,
+    selectedSuburb,
+    selectedZone,
+    selectedWard,
+    locationErrors,
+    manualWardNumber,
+    onUseCurrentLocation: handleUseCurrentLocation,
+    onProvinceSelect: handleProvinceSelect,
+    onCitySelect: handleCitySelect,
+    onSuburbSelect: handleSuburbSelect,
+    onZoneSelect: handleZoneSelect,
+    onWardSelect: handleWardSelect,
+    onManualWardNumberChange: (value) => {
+      setManualWardNumber(value);
+      if (selectedWard && String(selectedWard.ward_number || '') !== value.trim()) {
+        setSelectedWard(null);
+      }
+    },
+  };
 
-      {pinpointLocation && (
-        <View style={{
-          backgroundColor: colors.background,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: colors.border,
-          padding: 12,
-          marginBottom: 12,
-        }}>
-          <Text style={{ color: colors.textLight, fontSize: 12, marginBottom: 4 }}>PinPoint Address</Text>
-          <Text style={{ color: colors.accent, fontWeight: 'bold' }}>{pinpointLocation.digitalAddress}</Text>
-        </View>
-      )}
-
-      {locationLookupStatus ? (
-        <Text style={{ color: colors.textLight, fontSize: 12, marginBottom: 12 }}>
-          {locationLookupStatus}
-        </Text>
-      ) : null}
-
-      <Text style={{ color: colors.textLight, fontSize: 11, marginBottom: 12 }}>
-        Area details from OpenStreetMap. Ward number is selected or entered by you.
-      </Text>
-
-      {/* Province */}
-      <View style={{ marginBottom: 12 }}>
-        <Text style={subLabelStyle}>Province (Optional)</Text>
-        {loadingLocations && provinces.length === 0 ? (
-          <ActivityIndicator color={colors.accent} />
-        ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
-            {provinces.map((province) => (
-              <TouchableOpacity
-                key={province.id}
-                onPress={() => handleProvinceSelect(province)}
-                style={{
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                  marginRight: 8,
-                  borderRadius: 20,
-                  backgroundColor: selectedProvince?.id === province.id ? colors.accent : colors.surface,
-                  borderWidth: 1,
-                  borderColor: selectedProvince?.id === province.id ? colors.accent : colors.border,
-                }}
-              >
-                <Text style={{
-                  color: selectedProvince?.id === province.id ? '#fff' : colors.text,
-                  fontWeight: selectedProvince?.id === province.id ? 'bold' : 'normal',
-                }}>
-                  {province.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-        {locationErrors.province && (
-          <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>{locationErrors.province}</Text>
-        )}
-      </View>
-
-      {/* City */}
-      {selectedProvince && (
-        <View style={{ marginBottom: 12 }}>
-          <Text style={subLabelStyle}>City / Town (Optional)</Text>
-          {loadingLocations ? (
-            <ActivityIndicator color={colors.accent} />
-          ) : cities.length === 0 ? (
-            <Text style={{ color: colors.textLight, fontSize: 14, paddingVertical: 8 }}>No cities available</Text>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
-              {cities.map((city) => (
-                <TouchableOpacity
-                  key={city.id}
-                  onPress={() => handleCitySelect(city)}
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 10,
-                    marginRight: 8,
-                    borderRadius: 20,
-                    backgroundColor: selectedCity?.id === city.id ? colors.accent : colors.surface,
-                    borderWidth: 1,
-                    borderColor: selectedCity?.id === city.id ? colors.accent : colors.border,
-                  }}
-                >
-                  <Text style={{
-                    color: selectedCity?.id === city.id ? '#fff' : colors.text,
-                    fontWeight: selectedCity?.id === city.id ? 'bold' : 'normal',
-                  }}>
-                    {city.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-          {locationErrors.city && (
-            <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>{locationErrors.city}</Text>
-          )}
-        </View>
-      )}
-
-      {/* Suburb */}
-      {selectedCity && (
-        <View style={{ marginBottom: 12 }}>
-          <Text style={subLabelStyle}>Suburb (Optional)</Text>
-          {loadingLocations ? (
-            <ActivityIndicator color={colors.accent} />
-          ) : suburbs.length === 0 ? (
-            <Text style={{ color: colors.textLight, fontSize: 14, paddingVertical: 8 }}>No suburbs available</Text>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
-              {suburbs.map((suburb) => (
-                <TouchableOpacity
-                  key={suburb.id}
-                  onPress={() => handleSuburbSelect(suburb)}
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 10,
-                    marginRight: 8,
-                    borderRadius: 20,
-                    backgroundColor: selectedSuburb?.id === suburb.id ? colors.accent : colors.surface,
-                    borderWidth: 1,
-                    borderColor: selectedSuburb?.id === suburb.id ? colors.accent : colors.border,
-                  }}
-                >
-                  <Text style={{
-                    color: selectedSuburb?.id === suburb.id ? '#fff' : colors.text,
-                    fontWeight: selectedSuburb?.id === suburb.id ? 'bold' : 'normal',
-                  }}>
-                    {suburb.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-          {locationErrors.suburb && (
-            <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>{locationErrors.suburb}</Text>
-          )}
-        </View>
-      )}
-
-      {/* Zone (Optional) */}
-      {selectedSuburb && zones.length > 0 && (
-        <View style={{ marginBottom: 12 }}>
-          <Text style={subLabelStyle}>Zone (Optional)</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
-            {zones.map((zone) => (
-              <TouchableOpacity
-                key={zone.id}
-                onPress={() => handleZoneSelect(zone)}
-                style={{
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                  marginRight: 8,
-                  borderRadius: 20,
-                  backgroundColor: selectedZone?.id === zone.id ? colors.accent : colors.surface,
-                  borderWidth: 1,
-                  borderColor: selectedZone?.id === zone.id ? colors.accent : colors.border,
-                }}
-              >
-                <Text style={{
-                  color: selectedZone?.id === zone.id ? '#fff' : colors.text,
-                  fontWeight: selectedZone?.id === zone.id ? 'bold' : 'normal',
-                }}>
-                  {zone.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Ward */}
-      {selectedSuburb && (
-        <View style={{ marginBottom: 12 }}>
-          <Text style={subLabelStyle}>Ward Number (Optional)</Text>
-          {loadingLocations ? (
-            <ActivityIndicator color={colors.accent} />
-          ) : wards.length === 0 ? (
-            <Text style={{ color: colors.textLight, fontSize: 14, paddingVertical: 8 }}>No wards available</Text>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
-              {wards.map((ward) => (
-                <TouchableOpacity
-                  key={ward.id}
-                  onPress={() => handleWardSelect(ward)}
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 10,
-                    marginRight: 8,
-                    borderRadius: 20,
-                    backgroundColor: selectedWard?.id === ward.id ? colors.accent : colors.surface,
-                    borderWidth: 1,
-                    borderColor: selectedWard?.id === ward.id ? colors.accent : colors.border,
-                  }}
-                >
-                  <Text style={{
-                    color: selectedWard?.id === ward.id ? '#fff' : colors.text,
-                    fontWeight: selectedWard?.id === ward.id ? 'bold' : 'normal',
-                  }}>
-                    Ward {ward.ward_number}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-          {locationErrors.ward && (
-            <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>{locationErrors.ward}</Text>
-          )}
-        </View>
-      )}
-
-      <View style={{ marginBottom: 12 }}>
-        <Text style={subLabelStyle}>Enter Ward Number (Optional)</Text>
-        <TextInput
-          style={inputStyle}
-          placeholder="e.g. 12"
-          placeholderTextColor={colors.textLight}
-          selectionColor={colors.accent}
-          value={manualWardNumber}
-          onChangeText={(value) => {
-            setManualWardNumber(value);
-            if (selectedWard && String(selectedWard.ward_number || '') !== value.trim()) {
-              setSelectedWard(null);
-            }
-          }}
-          keyboardType="numeric"
-        />
-      </View>
-
-      {loadingLocations && (
-        <View style={{ alignItems: 'center', marginVertical: 8 }}>
-          <ActivityIndicator color={colors.accent} />
-          <Text style={{ color: colors.textLight, fontSize: 12, marginTop: 4 }}>Loading locations...</Text>
-        </View>
-      )}
-    </View>
-  );
-
-  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={{ flex: 1, backgroundColor: colors.background }}
     >
       <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 60, paddingBottom: 40 }}>
+        <SignupHeader step={step} />
 
-        {/* Header */}
-        <View style={{ alignItems: 'center', marginBottom: 32 }}>
-          <View style={{
-            width: 80, height: 80,
-            backgroundColor: colors.primary,
-            borderRadius: 40,
-            justifyContent: 'center',
-            alignItems: 'center',
-            marginBottom: 16
-          }}>
-            
-            <Image source={require('../assets/signup-removebg-preview.png')} style={{ width: 60, height: 60, top: 8 }} resizeMode="contain" />
-          </View>
-          <Text style={{ fontSize: 28, fontWeight: 'bold', color: colors.primary }}>
-            {step === 'details' ? 'Create Account' : 'Verify Phone'}
-          </Text>
-          <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 8 }}>
-            {step === 'details'
-              ? 'Join Comm-Connect today'
-              : 'Enter the code sent to your phone'}
-          </Text>
-        </View>
-
-        {/* STEP 1: DETAILS FORM */}
         {step === 'details' ? (
-          <>
-            {/* ── Role Selection ── */}
-            <View style={{ marginBottom: 24 }}>
-              <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 12 }}>
-                Select Account Type
-              </Text>
-              {roles.map((role) => (
-                <TouchableOpacity
-                  key={role.id}
-                  onPress={() => setSelectedRole(role.id)}
-                  style={{
-                    backgroundColor: selectedRole === role.id ? colors.accent : colors.surface,
-                    borderRadius: 12,
-                    padding: 16,
-                    marginBottom: 12,
-                    borderWidth: 1,
-                    borderColor: selectedRole === role.id ? colors.accent : colors.border
-                  }}
-                >
-                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: selectedRole === role.id ? '#fff' : colors.text }}>
-                    {role.title}
-                  </Text>
-                  <Text style={{ fontSize: 13, marginTop: 4, color: selectedRole === role.id ? '#fff' : colors.textLight }}>
-                    {role.description}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {selectedRole !== '' && (
-              <>
-                {/* ── Personal Details ── */}
-                <View style={{ marginBottom: 12 }}>
-                  <Text style={labelStyle}>First Name</Text>
-                  <TextInput style={inputStyle} placeholder="John" placeholderTextColor={colors.textLight} selectionColor={colors.accent} value={firstName} onChangeText={setFirstName} />
-                </View>
-
-                <View style={{ marginBottom: 12 }}>
-                  <Text style={labelStyle}>Last Name</Text>
-                  <TextInput style={inputStyle} placeholder="Doe" placeholderTextColor={colors.textLight} selectionColor={colors.accent} value={lastName} onChangeText={setLastName} />
-                </View>
-
-                <View style={{ marginBottom: 12 }}>
-                  <Text style={labelStyle}>Email</Text>
-                  <TextInput
-                    style={inputStyle}
-                    placeholder="john@example.com"
-                    placeholderTextColor={colors.textLight}
-                    selectionColor={colors.accent}
-                    value={email}
-                    onChangeText={setEmail}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                  />
-                </View>
-
-                {/* ── Phone with country code ── */}
-                <View style={{ marginBottom: 8 }}>
-                  <Text style={labelStyle}>Phone Number</Text>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TouchableOpacity
-                      onPress={() => setShowCountryPicker(!showCountryPicker)}
-                      style={{
-                        backgroundColor: colors.surface,
-                        borderRadius: 12,
-                        paddingHorizontal: 12,
-                        paddingVertical: 14,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 6,
-                      }}
-                    >
-                      <Text style={{ fontSize: 18 }}>{selectedCountry.flag}</Text>
-                      <Text style={{ fontSize: 15, color: colors.text, fontWeight: '500' }}>{selectedCountry.code}</Text>
-                      {loadingCountryCodes ? (
-                        <ActivityIndicator size="small" color={colors.accent} />
-                      ) : (
-                        <Text style={{ fontSize: 11, color: colors.textLight }}>▼</Text>
-                      )}
-                    </TouchableOpacity>
-
-                    <TextInput
-                      style={[inputStyle, { flex: 1 }]}
-                      placeholder="81 234 5678"
-                      placeholderTextColor={colors.textLight}
-                      selectionColor={colors.accent}
-                      value={phoneNumber}
-                      onChangeText={setPhoneNumber}
-                      keyboardType="phone-pad"
-                      autoComplete="tel"
-                    />
-                  </View>
-                </View>
-
-                {/* Country picker dropdown */}
-                {showCountryPicker && (
-                  <View style={{
-                    backgroundColor: colors.surface,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    marginBottom: 12,
-                    overflow: 'hidden',
-                  }}>
-                    {countryCodes.map((country) => (
-                      <TouchableOpacity
-                        key={`${country.name}-${country.code}`}
-                        onPress={() => {
-                          setSelectedCountry(country);
-                          setShowCountryPicker(false);
-                        }}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 12,
-                          padding: 14,
-                          borderBottomWidth: 0.5,
-                          borderBottomColor: colors.border,
-                          backgroundColor: selectedCountry.code === country.code && selectedCountry.name === country.name ? colors.background : 'transparent',
-                        }}
-                      >
-                        <Text style={{ fontSize: 20 }}>{country.flag}</Text>
-                        <Text style={{ fontSize: 15, color: colors.text }}>{country.countryName || country.name}</Text>
-                        <Text style={{ fontSize: 15, color: colors.textLight, marginLeft: 'auto' }}>{country.code}</Text>
-                        {selectedCountry.code === country.code && selectedCountry.name === country.name && (
-                          <Text style={{ color: colors.accent, fontSize: 16 }}>✓</Text>
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-
-                <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 16 }}>
-                  Don&apos;t include the country code or leading zero
-                </Text>
-
-                <View style={{ marginBottom: 12 }}>
-                  <Text style={labelStyle}>ID Number</Text>
-                  <TextInput
-                    style={inputStyle}
-                    placeholder="000000 0000 000"
-                    placeholderTextColor={colors.textLight}
-                    selectionColor={colors.accent}
-                    value={idNumber}
-                    onChangeText={setIdNumber}
-                    keyboardType="numeric"
-                  />
-                </View>
-
-                {/* ─── Location Selector ────────────────────────────── */}
-                {renderLocationSelector()}
-
-                {/* ─── Address Details ──────────────── */}
-                <View style={{ marginBottom: 12 }}>
-                  <Text style={labelStyle}>Address Details</Text>
-                  <TextInput
-                    style={[inputStyle, { minHeight: 60, textAlignVertical: 'top' }]}
-                    placeholder="e.g., 12 Melle Street, Braamfontein"
-                    placeholderTextColor={colors.textLight}
-                    selectionColor={colors.accent}
-                    value={location}
-                    onChangeText={setLocation}
-                    multiline
-                  />
-                  <Text style={{ fontSize: 11, color: colors.textLight, marginTop: 4 }}>
-                    Help emergency responders find you
-                  </Text>
-                </View>
-
-                {selectedRole === 'community_leader' && (
-                  <View style={{ marginBottom: 12 }}>
-                    <Text style={labelStyle}>Community / Organisation Name</Text>
-                    <TextInput
-                      style={inputStyle}
-                      placeholder="e.g. Soweto Community Forum"
-                      placeholderTextColor={colors.textLight}
-                      selectionColor={colors.accent}
-                      value={organizationName}
-                      onChangeText={setOrganizationName}
-                    />
-                  </View>
-                )}
-
-                {selectedRole === 'emergency_responder' && (
-                  <View style={{ marginBottom: 12 }}>
-                    <Text style={labelStyle}>Responder Type</Text>
-                    <TextInput
-                      style={inputStyle}
-                      placeholder="e.g. Police, Ambulance, Fire, Security"
-                      placeholderTextColor={colors.textLight}
-                      selectionColor={colors.accent}
-                      value={responderType}
-                      onChangeText={setResponderType}
-                    />
-                  </View>
-                )}
-
-                {/* ── Send OTP Button ── */}
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: colors.accent,
-                    borderRadius: 12,
-                    padding: 16,
-                    alignItems: 'center',
-                    marginTop: 12,
-                    marginBottom: 16,
-                    opacity: loading ? 0.7 : 1,
-                  }}
-                  onPress={handleSendOTP}
-                  disabled={loading}
-                >
-                  {loading
-                    ? <ActivityIndicator color="#fff" />
-                    : <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Send OTP</Text>
-                  }
-                </TouchableOpacity>
-              </>
-            )}
-          </>
+          <SignupDetailsStep
+            roles={roles}
+            selectedRole={selectedRole}
+            setSelectedRole={setSelectedRole}
+            firstName={firstName}
+            setFirstName={setFirstName}
+            lastName={lastName}
+            setLastName={setLastName}
+            email={email}
+            setEmail={setEmail}
+            phoneNumber={phoneNumber}
+            setPhoneNumber={setPhoneNumber}
+            selectedCountry={selectedCountry}
+            showCountryPicker={showCountryPicker}
+            loadingCountryCodes={loadingCountryCodes}
+            countrySearch={countrySearch}
+            setCountrySearch={setCountrySearch}
+            filteredCountryCodes={filteredCountryCodes}
+            toggleCountryPicker={toggleCountryPicker}
+            handleCountrySelect={handleCountrySelect}
+            idNumber={idNumber}
+            setIdNumber={setIdNumber}
+            location={location}
+            setLocation={setLocation}
+            organizationName={organizationName}
+            setOrganizationName={setOrganizationName}
+            responderType={responderType}
+            setResponderType={setResponderType}
+            loading={loading}
+            onSendOtp={handleSendOTP}
+            locationSelectorProps={locationSelectorProps}
+          />
         ) : (
-          /* STEP 2: OTP VERIFICATION */
-          <>
-            <Text style={{ fontSize: 14, fontWeight: '500', color: colors.text, marginBottom: 16, textAlign: 'center' }}>
-              Enter verification code
-            </Text>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 16 }}>
-              {otp.map((digit, index) => (
-                <TextInput
-                  key={index}
-                  ref={(ref) => (otpRefs.current[index] = ref)}
-                  style={{
-                    width: 46,
-                    height: 56,
-                    backgroundColor: colors.surface,
-                    borderRadius: 12,
-                    borderWidth: digit ? 2 : 1,
-                    borderColor: digit ? colors.accent : colors.border,
-                    fontSize: 22,
-                    fontWeight: 'bold',
-                    textAlign: 'center',
-                    color: colors.text,
-                  }}
-                  value={digit}
-                  onChangeText={(val) => handleOtpChange(val, index)}
-                  onKeyPress={(e) => handleOtpKeyPress(e, index)}
-                  keyboardType="number-pad"
-                  selectionColor={colors.accent}
-                  maxLength={6}
-                  selectTextOnFocus
-                  autoFocus={index === 0}
-                />
-              ))}
-            </View>
-
-            <TouchableOpacity
-              onPress={() => {
-                setStep('details');
-                setOtp(Array(OTP_LENGTH).fill(''));
-              }}
-              style={{ alignItems: 'center', marginBottom: 24 }}
-            >
-              <Text style={{ color: colors.accent, fontSize: 13 }}>← Change details</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={{
-                backgroundColor: colors.accent,
-                borderRadius: 12,
-                padding: 16,
-                alignItems: 'center',
-                marginBottom: 16,
-                opacity: loading ? 0.7 : 1,
-              }}
-              onPress={handleVerifyAndCreate}
-              disabled={loading}
-            >
-              {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Verify & Create Account</Text>
-              }
-            </TouchableOpacity>
-          </>
+          <SignupOtpStep
+            otp={otp}
+            otpRefs={otpRefs}
+            loading={loading}
+            onOtpChange={handleOtpChange}
+            onOtpKeyPress={handleOtpKeyPress}
+            onBack={handleOtpBack}
+            onVerify={handleVerifyAndCreate}
+          />
         )}
 
-        {/* ── Login Link ── */}
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
           <Text style={{ textAlign: 'center', color: colors.primary, fontSize: 14 }}>
             Already have an account?
@@ -1180,32 +698,7 @@ export default function SignupScreen() {
             <Text style={{ fontWeight: 'bold', color: colors.accent }}> Login</Text>
           </TouchableOpacity>
         </View>
-
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
-
-const labelStyle = {
-  fontSize: 14,
-  fontWeight: '500',
-  color: colors.text,
-  marginBottom: 8
-};
-
-const subLabelStyle = {
-  fontSize: 12,
-  fontWeight: '500',
-  color: colors.textLight,
-  marginBottom: 6
-};
-
-const inputStyle = {
-  backgroundColor: colors.surfaceRaised,
-  borderRadius: 12,
-  padding: 14,
-  fontSize: 16,
-  borderWidth: 1,
-  borderColor: colors.border,
-  color: colors.text
-};
