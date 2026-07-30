@@ -3,20 +3,21 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Modal, ScrollView, Text, TouchableOpacity, View, Vibration } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import BackIconButton from '../../components/BackIconButton';
 import { getCurrentUser, getRows, getUserProfile, subscribeToTable, updateRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
 const SERVICE_CONFIG = {
-  police:    { label: 'Police Unit',       icon: 'shield',  color: '#1D4ED8', bg: '#EFF6FF', gradient: ['#1D4ED8', '#1E40AF'] },
-  ambulance: { label: 'Ambulance',         icon: 'medkit',  color: '#059669', bg: '#ECFDF5', gradient: ['#059669', '#047857'] },
-  fire:      { label: 'Fire & Rescue',     icon: 'flame',   color: '#DC2626', bg: '#FEF2F2', gradient: ['#DC2626', '#B91C1C'] },
+  police: { label: 'Police Unit', icon: 'shield', color: '#5bc0be', bg: '#1c2541', gradient: ['#0b132b', '#3a506b'] },
+  ambulance: { label: 'Ambulance', icon: 'medkit', color: '#5bc0be', bg: '#1c2541', gradient: ['#1c2541', '#5bc0be'] },
+  fire: { label: 'Fire & Rescue', icon: 'flame', color: '#ffffff', bg: '#3a506b', gradient: ['#3a506b', '#0b132b'] },
 };
 
 const STATUS_CONFIG = {
-  pending:   { label: 'New Dispatch',  color: '#F59E0B', bg: '#FEF3C7' },
-  en_route:  { label: 'En Route',      color: '#3B82F6', bg: '#EFF6FF' },
-  on_scene:  { label: 'On Scene',      color: '#8B5CF6', bg: '#EDE9FE' },
-  resolved:  { label: 'Resolved',      color: '#10B981', bg: '#ECFDF5' },
+  pending: { label: 'New Dispatch', color: '#ffffff', bg: '#3a506b' },
+  en_route: { label: 'En Route', color: '#5bc0be', bg: '#1c2541' },
+  on_scene: { label: 'On Scene', color: '#5bc0be', bg: '#3a506b' },
+  resolved: { label: 'Resolved', color: '#5bc0be', bg: '#1c2541' },
 };
 
 export default function ResponderDashboardScreen() {
@@ -125,9 +126,9 @@ export default function ResponderDashboardScreen() {
 
   const nextStatusAction = (currentStatus) => {
     switch (currentStatus) {
-      case 'pending':  return { label: 'Mark En Route', next: 'en_route',  color: '#3B82F6' };
-      case 'en_route': return { label: 'Mark On Scene',  next: 'on_scene',  color: '#8B5CF6' };
-      case 'on_scene': return { label: 'Mark Resolved',  next: 'resolved',  color: '#10B981' };
+      case 'pending':  return { label: 'Mark En Route', next: 'en_route',  color: '#5bc0be' };
+      case 'en_route': return { label: 'Mark On Scene',  next: 'on_scene',  color: '#3a506b' };
+      case 'on_scene': return { label: 'Mark Resolved',  next: 'resolved',  color: '#5bc0be' };
       default: return null;
     }
   };
@@ -160,7 +161,7 @@ export default function ResponderDashboardScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             {isNew && (
               <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#EF4444' }} />
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#3a506b' }} />
               </Animated.View>
             )}
             <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.text, textTransform: 'capitalize' }}>
@@ -232,7 +233,8 @@ export default function ResponderDashboardScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
+      <BackIconButton />
       <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
         <ScrollView showsVerticalScrollIndicator={false}>
 
@@ -240,7 +242,7 @@ export default function ResponderDashboardScreen() {
             colors={serviceConfig.gradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={{ padding: 28, paddingTop: 50, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }}
+            style={{ padding: 28, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }}
           >
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <View>
@@ -260,7 +262,7 @@ export default function ResponderDashboardScreen() {
                   <Ionicons name={serviceConfig.icon} size={34} color="#fff" />
                 </View>
                 {pendingCount > 0 && (
-                  <Animated.View style={{ transform: [{ scale: pulseAnim }], backgroundColor: '#EF4444', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 }}>
+                  <Animated.View style={{ transform: [{ scale: pulseAnim }], backgroundColor: '#3a506b', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 }}>
                     <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>{pendingCount} NEW</Text>
                   </Animated.View>
                 )}
@@ -345,9 +347,9 @@ export default function ResponderDashboardScreen() {
                   const action = nextStatusAction(selectedDispatch.status);
                   const isUpdating = updatingId === selectedDispatch.id;
                   if (!action) return (
-                    <View style={{ backgroundColor: '#ECFDF5', borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 20 }}>
-                      <Ionicons name="checkmark-circle" size={28} color="#10B981" />
-                      <Text style={{ color: '#10B981', fontWeight: 'bold', marginTop: 6 }}>Dispatch Resolved</Text>
+                    <View style={{ backgroundColor: '#1c2541', borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 20 }}>
+                      <Ionicons name="checkmark-circle" size={28} color="#5bc0be" />
+                      <Text style={{ color: '#5bc0be', fontWeight: 'bold', marginTop: 6 }}>Dispatch Resolved</Text>
                     </View>
                   );
                   return (
@@ -398,9 +400,10 @@ function DetailRow({ label, value }) {
 
 function nextStatusAction(currentStatus) {
   switch (currentStatus) {
-    case 'pending':  return { label: 'Mark En Route', next: 'en_route',  color: '#3B82F6' };
-    case 'en_route': return { label: 'Mark On Scene',  next: 'on_scene',  color: '#8B5CF6' };
-    case 'on_scene': return { label: 'Mark Resolved',  next: 'resolved',  color: '#10B981' };
+    case 'pending':  return { label: 'Mark En Route', next: 'en_route',  color: '#5bc0be' };
+    case 'en_route': return { label: 'Mark On Scene',  next: 'on_scene',  color: '#3a506b' };
+    case 'on_scene': return { label: 'Mark Resolved',  next: 'resolved',  color: '#5bc0be' };
     default: return null;
   }
 }
+

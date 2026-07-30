@@ -11,6 +11,7 @@ import {
   View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import BackIconButton from "../../components/BackIconButton";
 import {
   getCurrentUser,
   getRows,
@@ -111,11 +112,11 @@ export default function EmergencyRequestScreen() {
   };
 
   const emergencyTypes = [
-    { id: "medical", label: "🚑 Medical", color: "#DC2626" },
-    { id: "crime", label: "🚨 Crime", color: "#B91C1C" },
-    { id: "fire", label: "🔥 Fire", color: "#EA580C" },
-    { id: "accident", label: "🚗 Accident", color: "#D97706" },
-    { id: "other", label: "📝 Other", color: "#6B7280" },
+    { id: "medical", label: "🚑 Medical", color: "#3a506b" },
+    { id: "crime", label: "🚨 Crime", color: "#3a506b" },
+    { id: "fire", label: "🔥 Fire", color: "#ffffff" },
+    { id: "accident", label: "🚗 Accident", color: "#5bc0be" },
+    { id: "other", label: "📝 Other", color: "#3a506b" },
   ];
 
   const handleSubmitEmergency = async () => {
@@ -242,7 +243,8 @@ export default function EmergencyRequestScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
+      <BackIconButton />
       <Animated.ScrollView style={{ flex: 1, opacity: fadeAnim }}>
         {/* Header */}
         <View
@@ -401,7 +403,7 @@ export default function EmergencyRequestScreen() {
           ) : savedPinpoints.length === 0 ? (
             <View
               style={{
-                backgroundColor: colors.error + "15",
+                backgroundColor: colors.surfaceSoft,
                 borderRadius: 12,
                 padding: 16,
                 marginBottom: 24,
@@ -447,7 +449,7 @@ export default function EmergencyRequestScreen() {
                   style={{
                     backgroundColor:
                       selectedPinpoint?.id === pin.id
-                        ? colors.accent + "15"
+                        ? colors.accentSoft
                         : colors.surface,
                     borderRadius: 12,
                     padding: 14,
@@ -554,10 +556,10 @@ export default function EmergencyRequestScreen() {
                     style={{
                       backgroundColor:
                         emergency.status === "pending"
-                          ? colors.warning + "20"
+                          ? colors.whiteSoft
                           : emergency.status === "in_progress"
-                            ? colors.accent + "20"
-                            : colors.success + "20",
+                            ? colors.accentSoft
+                            : colors.accentSoft,
                       paddingHorizontal: 10,
                       paddingVertical: 4,
                       borderRadius: 12,
@@ -617,3 +619,4 @@ export default function EmergencyRequestScreen() {
     </SafeAreaView>
   );
 }
+

@@ -3,9 +3,10 @@ import * as Location from 'expo-location';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, Share, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, ScrollView, Share, Text, TextInput, TouchableOpacity, Vibration, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import BackIconButton from '../../components/BackIconButton';
 import { deleteRow, getCurrentUser, getRows, getUserProfile, insertRow, updateRow } from '../../config/supabase';
 import { notifyEmergencyContactsBySms, showLocalSosNotification } from '../../config/notifications';
 import colors from '../../Utils/colors';
@@ -43,6 +44,7 @@ export default function PinPointScreen() {
   const [user, setUser] = useState(null);
   const holdTimerRef = useRef(null);
   const countdownRef = useRef(null);
+  const holdVibrationRef = useRef(null);
   const locationIntervalRef = useRef(null);
   const sosAlertIdRef = useRef(null);
   const sosLocationHistoryRef = useRef([]);
@@ -233,8 +235,11 @@ export default function PinPointScreen() {
   const clearSosHold = () => {
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
+    if (holdVibrationRef.current) clearInterval(holdVibrationRef.current);
     holdTimerRef.current = null;
     countdownRef.current = null;
+    holdVibrationRef.current = null;
+    Vibration.cancel();
     setHoldCountdown(HOLD_SECONDS);
   };
 
@@ -351,7 +356,7 @@ export default function PinPointScreen() {
       Alert.alert(
         'SOS Active',
         smsOpened
-          ? 'Send the prepared SMS to notify your emergency contacts. Your live location is updating every 10 seconds.'
+          ? 'Your SMS app opened with the emergency message. Your live location is updating every 10 seconds.'
           : 'Your live location is updating every 10 seconds, but no SMS app or contact phone number was available.'
       );
     } catch (error) {
@@ -367,6 +372,11 @@ export default function PinPointScreen() {
     if (sosActive || sosStarting) return;
 
     setHoldCountdown(HOLD_SECONDS);
+    Vibration.vibrate(120);
+    holdVibrationRef.current = setInterval(() => {
+      Vibration.vibrate(120);
+    }, 1000);
+
     countdownRef.current = setInterval(() => {
       setHoldCountdown((seconds) => Math.max(1, seconds - 1));
     }, 1000);
@@ -402,7 +412,8 @@ export default function PinPointScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
+      <BackIconButton />
       <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
         <View style={{ backgroundColor: colors.primary, padding: 20, alignItems: 'center' }}>
           <Ionicons name="location" size={50} color={colors.accent} />
@@ -524,7 +535,7 @@ export default function PinPointScreen() {
                   <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
                     <TouchableOpacity
                       onPress={() => shareAddress(addr)}
-                      style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8, padding: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 }}
+                      style={{ flex: 1, backgroundColor: colors.success, borderRadius: 8, padding: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 }}
                     >
                       <Ionicons name="share" size={16} color="#fff" />
                       <Text style={{ color: '#fff', fontSize: 12 }}>Share</Text>

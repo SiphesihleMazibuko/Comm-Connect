@@ -62,7 +62,7 @@ export default function SignupScreen() {
   const [organizationName, setOrganizationName] = useState('');
   const [responderType, setResponderType] = useState('');
 
-  // --- Location Hierarchy States ------------------------------------
+  //Location Hierarchy States
   const [provinces, setProvinces] = useState([]);
   const [cities, setCities] = useState([]);
   const [suburbs, setSuburbs] = useState([]);
@@ -79,7 +79,7 @@ export default function SignupScreen() {
   const [locationErrors, setLocationErrors] = useState({});
   const filteredCountryCodes = searchCountryCodes(countryCodes, countrySearch);
 
-  // --- Load Provinces on Mount --------------------------------------------
+  //Load Provinces on Mount 
   useEffect(() => {
     countryCodesMountedRef.current = true;
 
@@ -232,7 +232,7 @@ export default function SignupScreen() {
     }
   };
 
-  // --- Location Selection Handlers --------------------------------------
+  //Location Selection Handlers
   const handleProvinceSelect = (province) => {
     setSelectedProvince(province);
     setSelectedCity(null);
@@ -276,7 +276,7 @@ export default function SignupScreen() {
     setManualWardNumber(String(ward.ward_number || ''));
   };
 
-  // --- Validate Location --------------------------------------------------
+  //Validate Location 
   const validateLocation = () => {
     setLocationErrors({});
     return true;
@@ -413,7 +413,7 @@ export default function SignupScreen() {
     }
   };
 
-  // --- OTP state ----------------------------------------------------------
+  //OTP state 
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''));
   const [verificationId, setVerificationId] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -438,7 +438,7 @@ export default function SignupScreen() {
     }
   ];
 
-  // --- Send OTP ----------------------------------------------------------
+  //Send OTP 
   const handleSendOTP = async () => {
     if (!selectedRole) {
       Alert.alert('Error', 'Please select an account type');
@@ -479,7 +479,7 @@ export default function SignupScreen() {
     }
   };
 
-  // --- OTP Input Handlers --------------------------------------------------
+  //OTP Input Handlers 
   const handleOtpChange = (value, index) => {
     if (!/^\d*$/.test(value)) return;
 
@@ -510,7 +510,7 @@ export default function SignupScreen() {
     }
   };
 
-  // --- Verify OTP & Create Account --------------------------------------
+  //Verify OTP & Create Account 
   const handleVerifyAndCreate = async () => {
     const otpString = otp.join('');
     if (otpString.length < OTP_LENGTH) {
@@ -600,7 +600,7 @@ export default function SignupScreen() {
     }
   };
 
-  // --- Render -------------------------------------------------------------
+  //Render 
   const handleOtpBack = () => {
     setStep('details');
     setOtp(Array(OTP_LENGTH).fill(''));
@@ -642,7 +642,7 @@ export default function SignupScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={{ flex: 1, backgroundColor: colors.background }}
     >
-      <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 60, paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 40 }}>
         <SignupHeader step={step} />
 
         {step === 'details' ? (
@@ -691,7 +691,7 @@ export default function SignupScreen() {
         )}
 
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
-          <Text style={{ textAlign: 'center', color: colors.primary, fontSize: 14 }}>
+          <Text style={{ textAlign: 'center', color: colors.text, fontSize: 14 }}>
             Already have an account?
           </Text>
           <TouchableOpacity onPress={() => router.push('/login')}>

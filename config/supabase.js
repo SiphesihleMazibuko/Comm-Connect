@@ -76,10 +76,10 @@ const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn("⚠️ Missing Supabase environment variables");
+  console.warn("Missing Supabase environment variables");
 }
 
-console.log("🔐 Initializing Supabase client...");
+console.log("Initializing Supabase client...");
 
 // Create Supabase client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -124,7 +124,7 @@ const isLikelyNetworkError = (error) => {
   );
 };
 
-// ✅ GET CURRENT USER
+// GET CURRENT USER
 export const getCurrentUser = async () => {
   try {
     if (!(await refreshConnectivity())) {
@@ -154,7 +154,7 @@ export const getCurrentUser = async () => {
   }
 };
 
-// ✅ GET ROWS FROM ANY TABLE
+//GET ROWS FROM ANY TABLE
 export const getRows = async (table, options = {}) => {
   try {
     if (!(await refreshConnectivity())) {
@@ -184,7 +184,7 @@ export const getRows = async (table, options = {}) => {
   }
 };
 
-// ✅ GET SINGLE ROW
+// GET SINGLE ROW
 export const getRow = async (table, id) => {
   try {
     if (!(await refreshConnectivity())) {
@@ -209,21 +209,65 @@ export const getRow = async (table, id) => {
   }
 };
 
-// ✅ INSERT A ROW
+// INSERT A ROW
+const normalizeReportPayload = (data = {}) => {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+
+  const { crimCategory, ...payload } = data;
+  if (crimCategory && !payload.crimeCategory) {
+    payload.crimeCategory = crimCategory;
+  }
+
+  return payload;
+};
+
+const getMissingSchemaColumn = (error) => {
+  if (error?.code !== "PGRST204") return null;
+  const match = error?.message?.match(/Could not find the '([^']+)' column/);
+  return match?.[1] || null;
+};
+
+const retryWithoutMissingColumn = async ({ table, data, error, runQuery }) => {
+  const missingColumn = getMissingSchemaColumn(error);
+  if (!missingColumn || !data || !(missingColumn in data)) throw error;
+
+  const { [missingColumn]: _missingColumn, ...fallbackData } = data;
+  offlineWarn(`${table}: retrying without missing schema column "${missingColumn}".`);
+  return await runQuery(fallbackData);
+};
+
 export const insertRow = async (table, data) => {
   try {
+    const payload = table === "reports" ? normalizeReportPayload(data) : data;
+
     if (!(await refreshConnectivity())) {
       offlineLog(`insertRow(${table}): offline, saving locally and queueing insert.`);
-      return await saveLocalMutation(table, "insert", data);
+      return await saveLocalMutation(table, "insert", payload);
     }
 
-    const { data: inserted, error } = await supabase
-      .from(table)
-      .insert(data)
-      .select()
-      .single();
+    const runInsert = async (insertPayload) => {
+      const { data: insertedRow, error } = await supabase
+        .from(table)
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return insertedRow;
+    };
     
-    if (error) throw error;
+    let inserted;
+    try {
+      inserted = await runInsert(payload);
+    } catch (error) {
+      inserted = await retryWithoutMissingColumn({
+        table,
+        data: payload,
+        error,
+        runQuery: runInsert,
+      });
+    }
+
     await cacheRow(table, inserted);
     offlineLog(`insertRow(${table}): inserted remotely and cached ${inserted?.id || "new row"}.`);
     return inserted;
@@ -231,28 +275,46 @@ export const insertRow = async (table, data) => {
     console.error(`Error inserting row into ${table}:`, error);
     if (!isOnline() || isLikelyNetworkError(error)) {
       offlineWarn(`insertRow(${table}): network failure, saving locally and queueing insert.`);
-      return await saveLocalMutation(table, "insert", data);
+      return await saveLocalMutation(table, "insert", table === "reports" ? normalizeReportPayload(data) : data);
     }
     throw error;
   }
 };
 
-// ✅ UPDATE A ROW
+// UPDATE A ROW
 export const updateRow = async (table, id, data) => {
   try {
+    const payload = table === "reports" ? normalizeReportPayload(data) : data;
+
     if (!(await refreshConnectivity())) {
       offlineLog(`updateRow(${table}/${id}): offline, saving locally and queueing update.`);
-      return await saveLocalMutation(table, "update", data, id);
+      return await saveLocalMutation(table, "update", payload, id);
     }
 
-    const { data: updated, error } = await supabase
-      .from(table)
-      .update(data)
-      .eq("id", id)
-      .select()
-      .single();
+    const runUpdate = async (updatePayload) => {
+      const { data: updatedRow, error } = await supabase
+        .from(table)
+        .update(updatePayload)
+        .eq("id", id)
+        .select()
+        .single();
 
-    if (error) throw error;
+      if (error) throw error;
+      return updatedRow;
+    };
+
+    let updated;
+    try {
+      updated = await runUpdate(payload);
+    } catch (error) {
+      updated = await retryWithoutMissingColumn({
+        table,
+        data: payload,
+        error,
+        runQuery: runUpdate,
+      });
+    }
+
     await cacheRow(table, updated);
     offlineLog(`updateRow(${table}/${id}): updated remotely and cached locally.`);
     return updated;
@@ -260,13 +322,13 @@ export const updateRow = async (table, id, data) => {
     console.error(`Error updating row in ${table}:`, error);
     if (!isOnline() || isLikelyNetworkError(error)) {
       offlineWarn(`updateRow(${table}/${id}): network failure, saving locally and queueing update.`);
-      return await saveLocalMutation(table, "update", data, id);
+      return await saveLocalMutation(table, "update", table === "reports" ? normalizeReportPayload(data) : data, id);
     }
     throw error;
   }
 };
 
-// ✅ DELETE A ROW
+// DELETE A ROW
 export const deleteRow = async (table, id) => {
   try {
     if (!(await refreshConnectivity())) {
@@ -292,7 +354,7 @@ export const deleteRow = async (table, id) => {
   }
 };
 
-// ✅ SUBSCRIBE TO TABLE CHANGES
+// SUBSCRIBE TO TABLE CHANGES
 export const subscribeToTable = (table, callback) => {
   if (!isOnline()) {
     offlineLog(`subscribeToTable(${table}): offline, skipping realtime subscription.`);
@@ -357,7 +419,7 @@ export const getUserProfile = async (userId) => {
   }
 };
 
-// ✅ UPSERT FUNCTION
+// UPSERT FUNCTION
 export const upsertRow = async (table, data) => {
   try {
     if (!(await refreshConnectivity())) {

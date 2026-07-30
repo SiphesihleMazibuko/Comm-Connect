@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import BackIconButton from '../../components/BackIconButton';
 import { getCurrentUser, getSupabaseClient, getUserProfile, updateRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
 import { useRouter } from 'expo-router';
@@ -172,7 +173,7 @@ export default function SettingsScreen() {
 
   const SettingItem = ({ icon, title, subtitle, children }) => (
     <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accent + '10', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentSoft, justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
         <Ionicons name={icon} size={22} color={colors.accent} />
       </View>
       <View style={{ flex: 1 }}>
@@ -184,7 +185,9 @@ export default function SettingsScreen() {
   );
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <BackIconButton />
+      <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Header */}
       <View style={{ backgroundColor: colors.primary, padding: 24, alignItems: 'center' }}>
         <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
@@ -304,7 +307,7 @@ export default function SettingsScreen() {
             ].map((lang) => (
               <TouchableOpacity
                 key={lang.code}
-                style={{ padding: 12, borderRadius: 8, backgroundColor: language === lang.code ? colors.accent + '20' : 'transparent', marginBottom: 8 }}
+                style={{ padding: 12, borderRadius: 8, backgroundColor: language === lang.code ? colors.accentSoft : 'rgba(255,255,255,0)', marginBottom: 8 }}
                 onPress={() => changeLanguage(lang.code)}
               >
                 <Text style={{ fontSize: 16, color: language === lang.code ? colors.accent : colors.text, textAlign: 'center' }}>
@@ -370,6 +373,7 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }

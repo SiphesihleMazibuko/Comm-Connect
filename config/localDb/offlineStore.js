@@ -275,6 +275,23 @@ const removeLocalRecord = async (table, id) => {
   log(`Removed local record ${table}/${id}`);
 };
 
+const normalizeReportPayload = (data = {}) => {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+
+  const { crimCategory, ...payload } = data;
+  if (crimCategory && !payload.crimeCategory) {
+    payload.crimeCategory = crimCategory;
+  }
+
+  return payload;
+};
+
+const getMissingSchemaColumn = (error) => {
+  if (error?.code !== 'PGRST204') return null;
+  const match = error?.message?.match(/Could not find the '([^']+)' column/);
+  return match?.[1] || null;
+};
+
 export const syncQueuedChanges = async (supabase) => {
   if (syncInProgress) {
     log('Sync skipped because another sync is already running.');
@@ -294,7 +311,7 @@ export const syncQueuedChanges = async (supabase) => {
 
     for (const item of queue) {
       const { table, recordId, operation } = item;
-      let payload = item.data || {};
+      let payload = table === 'reports' ? normalizeReportPayload(item.data || {}) : item.data || {};
 
       try {
         log(`Syncing ${operation} for ${table}/${recordId}`);
@@ -320,7 +337,21 @@ export const syncQueuedChanges = async (supabase) => {
           ? supabase.from(table).update(updatePayload).eq('id', recordId)
           : supabase.from(table).upsert(payload);
 
-        const { data, error } = await query.select().single();
+        let { data, error } = await query.select().single();
+        const missingColumn = getMissingSchemaColumn(error);
+
+        if (missingColumn && missingColumn in payload) {
+          const { [missingColumn]: _missingColumn, ...fallbackPayload } = payload;
+          payload = fallbackPayload;
+          const { id: _fallbackId, ...fallbackUpdatePayload } = payload;
+          const fallbackQuery = operation === 'update'
+            ? supabase.from(table).update(fallbackUpdatePayload).eq('id', recordId)
+            : supabase.from(table).upsert(payload);
+          const fallbackResult = await fallbackQuery.select().single();
+          data = fallbackResult.data;
+          error = fallbackResult.error;
+        }
+
         if (error) throw error;
 
         await cacheRow(table, data || payload);

@@ -16,7 +16,7 @@ export default function SignupHeader({ step }) {
         <Image source={require('../../assets/signup-removebg-preview.png')} style={{ width: 60, height: 60, top: 8 }} resizeMode="contain" />
       </View>
 
-      <Text style={{ fontSize: 28, fontWeight: 'bold', color: colors.primary }}>
+      <Text style={{ fontSize: 28, fontWeight: 'bold', color: colors.text }}>
         {step === 'details' ? 'Create Account' : 'Verify Phone'}
       </Text>
       <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 8 }}>

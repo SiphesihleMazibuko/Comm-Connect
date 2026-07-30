@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import BackIconButton from '../../components/BackIconButton';
 import colors from '../../Utils/colors';
 import { getCurrentUser, getRows, getUserProfile, insertRow, subscribeToTable, updateRow } from '../../config/supabase';
 
@@ -273,7 +274,8 @@ export default function CommunityFeedScreen() {
     .join(' - ');
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
+      <BackIconButton />
       <View style={{ flex: 1, backgroundColor: colors.background }}>
 
         {/* Header */}
@@ -385,7 +387,7 @@ export default function CommunityFeedScreen() {
                     marginBottom: 12,
                     elevation: isCrimeAlert ? 4 : 1,
                     borderLeftWidth: isCrimeAlert ? 4 : 0,
-                    borderLeftColor: isCrimeAlert ? colors.error : 'transparent',
+                    borderLeftColor: isCrimeAlert ? colors.error : colors.surface,
                     shadowColor: isCrimeAlert ? colors.error : '#000',
                     shadowOpacity: isCrimeAlert ? 0.15 : 0.05,
                     shadowRadius: isCrimeAlert ? 6 : 2,
@@ -422,7 +424,7 @@ export default function CommunityFeedScreen() {
                       )}
 
                       {isArchived && (
-                        <View style={{ backgroundColor: colors.textLight + '18', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
+                        <View style={{ backgroundColor: colors.surfaceSoft, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
                           <Text style={{ color: colors.textLight, fontSize: 10, fontWeight: 'bold' }}>ARCHIVED</Text>
                         </View>
                       )}
@@ -435,7 +437,7 @@ export default function CommunityFeedScreen() {
                             width: 32,
                             height: 32,
                             borderRadius: 16,
-                            backgroundColor: colors.warning + '18',
+                            backgroundColor: colors.whiteSoft,
                             justifyContent: 'center',
                             alignItems: 'center',
                           }}

@@ -277,7 +277,7 @@ export default function LoginScreen() {
                       padding: 14,
                       borderBottomWidth: 0.5,
                       borderBottomColor: colors.border,
-                      backgroundColor: selectedCountry.code === country.code && selectedCountry.name === country.name ? colors.background : 'transparent',
+                      backgroundColor: selectedCountry.code === country.code && selectedCountry.name === country.name ? colors.background : 'rgba(255,255,255,0)',
                     }}
                   >
                     <Text style={{ fontSize: 20 }}>{country.flag}</Text>
@@ -341,7 +341,7 @@ export default function LoginScreen() {
         <TouchableOpacity
           style={{
             backgroundColor: colors.accent,
-            borderRadius: 12,
+            borderRadius: 15,
             padding: 16,
             alignItems: 'center',
             marginBottom: 16,
@@ -361,7 +361,7 @@ export default function LoginScreen() {
 
         {/* Sign up link */}
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
-          <Text style={{ color: colors.primary, fontSize: 14 }}>Don&apos;t have an account?</Text>
+          <Text style={{ color: colors.text, fontSize: 14 }}>Don&apos;t have an account?</Text>
           <TouchableOpacity onPress={() => router.push('/signup')}>
             <Text style={{ fontWeight: 'bold', color: colors.accent }}> Sign Up</Text>
           </TouchableOpacity>

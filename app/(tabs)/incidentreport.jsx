@@ -14,8 +14,9 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getCurrentUser, getRows, insertRow, getUserProfile } from '../../config/supabase';
+import BackIconButton from '../../components/BackIconButton';
 import { uploadReportImages } from '../../config/mediaUpload';
+import { getCurrentUser, getRows, getUserProfile, insertRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
 export default function IncidentReportScreen() {
@@ -24,6 +25,8 @@ export default function IncidentReportScreen() {
   const [userProfile, setUserProfile] = useState(null);
 
   const [reportType, setReportType] = useState('crime');
+  const [crimeCategory, setCrimeCategory] = useState('theft');
+  const [otherCategory, setOtherCategory] = useState('funeral');
   const [description, setDescription] = useState('');
   const [anonymous, setAnonymous] = useState(false);
   const [images, setImages] = useState([]);
@@ -209,10 +212,12 @@ export default function IncidentReportScreen() {
       }
 
       // Submit report with ward_id and suburb_id
-      await insertRow('reports', {
+      const reportPayload = {
         userId: anonymous ? null : user.id,
         submittedBy: user.id,
         reportType,
+        crimeCategory: reportType === 'crime' ? crimeCategory : null,
+        otherCategory: reportType === 'other' ? otherCategory : null,
         description: description.trim(),
         photoUrls: imageUrls,
         location: {
@@ -220,20 +225,25 @@ export default function IncidentReportScreen() {
           longitude: selectedPinpoint.longitude,
           mapsUrl: selectedPinpoint.mapsUrl,
           digitalAddress: selectedPinpoint.digitalAddress,
-          label: selectedPinpoint.label
+          label: selectedPinpoint.label,
+          crimeCategory: reportType === 'crime' ? crimeCategory : null,
+          otherCategory: reportType === 'other' ? otherCategory : null,
         },
         anonymous,
         status: 'pending_review',
         createdAt: new Date().toISOString(),
-        // ─── KEY: Include ward_id and suburb_id ──────────────────
         suburb_id: userProfile.suburb_id,
         ward_id: userProfile.ward_id,
-      });
+      };
+
+      await insertRow('reports', reportPayload);
 
       setDescription('');
       setImages([]);
       setAnonymous(false);
       setReportType('crime');
+      setCrimeCategory('theft');
+      setOtherCategory('funeral');
 
       await loadUserReports(user);
 
@@ -268,14 +278,49 @@ export default function IncidentReportScreen() {
   };
 
   const reportTypes = [
-    { id: 'crime', label: '🚨 Crime', color: colors.error },
-    { id: 'hazard', label: '⚠️ Hazard', color: colors.warning },
-    { id: 'infrastructure', label: '🏗️ Infrastructure', color: colors.primary },
-    { id: 'other', label: '📝 Other', color: colors.textLight }
+    { id: 'crime', label: 'Crime', icon: 'shield', color: colors.error },
+    { id: 'hazard', label: 'Hazard', icon: 'warning', color: colors.warning },
+    { id: 'infrastructure', label: 'Infrastructure', icon: 'construct', color: colors.primary },
+    { id: 'other', label: 'Other', icon: 'calendar', color: colors.textLight },
+  ];
+  const crimeCategories = [
+    { id: 'theft', label: 'Theft', icon: 'pricetag' },
+    { id: 'burglary', label: 'Burglary', icon: 'home' },
+    { id: 'assault', label: 'Assault', icon: 'body' },
+    { id: 'robbery', label: 'Robbery', icon: 'alert-circle' },
+    { id: 'vandalism', label: 'Vandalism', icon: 'hammer' },
+    { id: 'suspicious_activity', label: 'Suspicious Activity', icon: 'eye' },
+    { id: 'other_crime', label: 'Other Crime', icon: 'ellipsis-horizontal' },
   ];
 
+  const otherCategories = [
+    { id: 'funeral', label: 'Funeral', icon: 'flower' },
+    { id: 'wedding', label: 'Wedding', icon: 'heart' },
+    { id: 'community_event', label: 'Community Event', icon: 'people' },
+    { id: 'lost_found', label: 'Lost & Found', icon: 'search' },
+    { id: 'noise_complaint', label: 'Noise Complaint', icon: 'volume-high' },
+    { id: 'other_event', label: 'Other', icon: 'ellipsis-horizontal' },
+  ];
+
+  const getCrimeCategoryLabel = (value) => (
+    crimeCategories.find((category) => category.id === value)?.label || 'Other Crime'
+  );
+
+  const getReportCrimeCategory = (report) => (
+    report?.crimeCategory || report?.location?.crimeCategory || 'other_crime'
+  );
+
+  const getOtherCategoryLabel = (value) => (
+    otherCategories.find((category) => category.id === value)?.label || 'Other'
+  );
+
+  const getReportOtherCategory = (report) => (
+    report?.otherCategory || report?.location?.otherCategory || 'other_event'
+  );
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
+      <BackIconButton />
       <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
         {/* Header */}
         <View style={{ backgroundColor: colors.primary, padding: 24, alignItems: 'center' }}>
@@ -310,13 +355,28 @@ export default function IncidentReportScreen() {
                 }}
                 onPress={() => setReportType(type.id)}
               >
-                <Text style={{ fontSize: 20, marginBottom: 4 }}>
-                  {type.label.split(' ')[0]}
-                </Text>
+                <View
+                  style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: 21,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: reportType === type.id ? 'rgba(255,255,255,0.18)' : colors.background,
+                    marginBottom: 8
+                  }}
+                >
+                  <Ionicons
+                    name={type.icon}
+                    size={22}
+                    color={reportType === type.id ? '#fff' : type.color}
+                  />
+                </View>
                 <Text
                   style={{
-                    fontSize: 12,
-                    color: reportType === type.id ? '#fff' : colors.text
+                    fontSize: 13,
+                    color: reportType === type.id ? '#fff' : colors.text,
+                    fontWeight: '700'
                   }}
                 >
                   {type.label}
@@ -324,6 +384,80 @@ export default function IncidentReportScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          {reportType === 'crime' && (
+            <>
+              <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 12 }}>
+                Crime Kind
+              </Text>
+
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 }}>
+                {crimeCategories.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    onPress={() => setCrimeCategory(category.id)}
+                    style={{
+                      width: '47%',
+                      backgroundColor: crimeCategory === category.id ? colors.accent : colors.surface,
+                      borderRadius: 12,
+                      padding: 12,
+                      borderWidth: 1.5,
+                      borderColor: crimeCategory === category.id ? colors.accent : colors.border,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 8
+                    }}
+                  >
+                    <Ionicons
+                      name={category.icon}
+                      size={18}
+                      color={crimeCategory === category.id ? '#fff' : colors.accent}
+                    />
+                    <Text style={{ flex: 1, color: crimeCategory === category.id ? '#fff' : colors.text, fontWeight: '600', fontSize: 12 }}>
+                      {category.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+
+          {reportType === 'other' && (
+            <>
+              <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 12 }}>
+                Other Kind
+              </Text>
+
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 }}>
+                {otherCategories.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    onPress={() => setOtherCategory(category.id)}
+                    style={{
+                      width: '47%',
+                      backgroundColor: otherCategory === category.id ? colors.accent : colors.surface,
+                      borderRadius: 12,
+                      padding: 12,
+                      borderWidth: 1.5,
+                      borderColor: otherCategory === category.id ? colors.accent : colors.border,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 8
+                    }}
+                  >
+                    <Ionicons
+                      name={category.icon}
+                      size={18}
+                      color={otherCategory === category.id ? '#fff' : colors.accent}
+                    />
+                    <Text style={{ flex: 1, color: otherCategory === category.id ? '#fff' : colors.text, fontWeight: '600', fontSize: 12 }}>
+                      {category.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
 
           {/* Description */}
           <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 12 }}>
@@ -452,7 +586,7 @@ export default function IncidentReportScreen() {
           {loadingPinpoints ? (
             <View
               style={{
-                backgroundColor: colors.accent + '10',
+                backgroundColor: colors.accentSoft,
                 borderRadius: 12,
                 padding: 16,
                 marginBottom: 24,
@@ -469,12 +603,12 @@ export default function IncidentReportScreen() {
           ) : savedPinpoints.length === 0 ? (
             <View
               style={{
-                backgroundColor: colors.error + '15',
+                backgroundColor: colors.surfaceSoft,
                 borderRadius: 12,
                 padding: 16,
                 marginBottom: 24,
                 borderWidth: 1,
-                borderColor: colors.error + '40'
+                borderColor: colors.border
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -506,7 +640,7 @@ export default function IncidentReportScreen() {
           ) : (
             <View style={{ marginBottom: 24 }}>
               <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 10 }}>
-                📍 Report Location
+                Report Location
               </Text>
 
               <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 12 }}>
@@ -522,7 +656,7 @@ export default function IncidentReportScreen() {
                     alignItems: 'center',
                     backgroundColor:
                       selectedPinpoint?.id === pin.id
-                        ? colors.accent + '15'
+                        ? colors.accentSoft
                         : colors.surface,
                     borderRadius: 12,
                     padding: 14,
@@ -646,7 +780,7 @@ export default function IncidentReportScreen() {
 
                           <View
                             style={{
-                              backgroundColor: statusColor + '20',
+                              backgroundColor: statusColor === colors.accent ? colors.accentSoft : colors.surfaceRaised,
                               borderRadius: 20,
                               paddingVertical: 4,
                               paddingHorizontal: 10
@@ -664,13 +798,25 @@ export default function IncidentReportScreen() {
                           </View>
                         </View>
 
+                        {report.reportType === 'crime' && (
+                          <Text style={{ fontSize: 12, color: colors.accent, marginBottom: 6 }}>
+                            Crime kind: {getCrimeCategoryLabel(getReportCrimeCategory(report))}
+                          </Text>
+                        )}
+
+                        {report.reportType === 'other' && (
+                          <Text style={{ fontSize: 12, color: colors.accent, marginBottom: 6 }}>
+                            Other kind: {getOtherCategoryLabel(getReportOtherCategory(report))}
+                          </Text>
+                        )}
+
                         <Text style={{ fontSize: 13, color: colors.textLight, marginBottom: 6 }}>
                           {report.description}
                         </Text>
 
                         {report.location?.label && (
                           <Text style={{ fontSize: 12, color: colors.textLight }}>
-                            📍 {report.location.label}
+                            {report.location.label}
                           </Text>
                         )}
 

@@ -1,9 +1,55 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Tabs, router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Platform, View } from 'react-native';
 import { getCurrentUser, getSupabaseClient, getUserProfile } from '../../config/supabase';
 import colors from '../../Utils/colors';
+
+function GlassTabBackground() {
+  return (
+    <LinearGradient
+      colors={['rgba(255,255,255,0.22)', 'rgba(91,192,190,0.14)', 'rgba(28,37,65,0.86)']}
+      locations={[0, 0.45, 1]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ flex: 1, borderRadius: 30 }}
+    />
+  );
+}
+
+function GlassTabIcon({ name, color, size, focused }) {
+  return (
+  <View
+    style={{
+      width: focused ? 55 : 34,
+      height: focused ? 55  : 40,
+      borderRadius: 50,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: focused ? 'rgba(91,192,190,0.24)' : 'transparent',
+      borderWidth: focused ? 1 : 0,
+      borderColor: focused ? 'rgba(255,255,255,0.34)' : 'transparent',
+      shadowColor: colors.glow,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: focused ? 0.34 : 0,
+      shadowRadius: 12,
+      elevation: focused ? 8 : 0,
+      marginTop:focused? 10: 0
+    }}
+  >
+    <Ionicons name={name} size={focused ? size + 2 : size} color={color} />
+  </View>
+  );
+}
+
+const communityFeedIcon = (props) => <GlassTabIcon name="newspaper" {...props} />;
+const responderHomeIcon = (props) => <GlassTabIcon name="medical" {...props} />;
+const emergencyIcon = (props) => <GlassTabIcon name="alert-circle" {...props} />;
+const pinpointIcon = (props) => <GlassTabIcon name="location" {...props} />;
+const reportIcon = (props) => <GlassTabIcon name="megaphone" {...props} />;
+const approvalsIcon = (props) => <GlassTabIcon name="checkmark-done-circle" {...props} />;
+const settingsIcon = (props) => <GlassTabIcon name="settings" {...props} />;
 
 export default function TabLayout() {
   const [role, setRole] = useState(null);
@@ -72,12 +118,42 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textLight,
+        tabBarActiveTintColor: colors.text,
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.66)',
+        tabBarBackground: GlassTabBackground,
         tabBarStyle: {
-          backgroundColor: colors.surface,
-          height: 60,
-          paddingBottom: 8,
+          position: 'absolute',
+          left: 16,
+          right: 16,
+          bottom: Platform.OS === 'ios' ? 18 : 14,
+          height: 72,
+          paddingTop: 10,
+          paddingBottom: Platform.OS === 'ios' ? 14 : 10,
+          paddingHorizontal: 10,
+          backgroundColor: 'rgba(28,37,65,0.52)',
+          borderTopWidth: 1,
+          borderWidth: 1,
+          borderColor: 'rgba(255,255,255,0.22)',
+          borderRadius: 30,
+          overflow: 'hidden',
+          shadowColor: colors.glow,
+          shadowOffset: { width: 0, height: 14 },
+          shadowOpacity: 0.28,
+          shadowRadius: 24,
+          elevation: 18,
+        },
+        tabBarItemStyle: {
+          borderRadius: 24,
+          minHeight: 52,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '700',
+          marginTop: 2,
+        },
+        tabBarHideOnKeyboard: true,
+        sceneStyle: {
+          backgroundColor: colors.background,
         },
       }}
     >
@@ -89,9 +165,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           href: isResident || isLeader ? undefined : null,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="newspaper" size={size} color={color} />
-          ),
+          tabBarIcon: communityFeedIcon,
         }}
       />
 
@@ -103,9 +177,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           href: isResponder ? undefined : null,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="medical" size={size} color={color} />
-          ),
+          tabBarIcon: responderHomeIcon,
         }}
       />
 
@@ -117,9 +189,7 @@ export default function TabLayout() {
         options={{
           title: 'Emergencies',
           href: isResponder ? undefined : null,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="alert-circle" size={size} color={color} />
-          ),
+          tabBarIcon: emergencyIcon,
         }}
       />
 
@@ -129,9 +199,7 @@ export default function TabLayout() {
         options={{
           title: 'PinPoint',
           href: isResident || isLeader ? undefined : null,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="location" size={size} color={color} />
-          ),
+          tabBarIcon: pinpointIcon,
         }}
       />
 
@@ -141,9 +209,7 @@ export default function TabLayout() {
         options={{
           title: 'Report',
           href: isResident ? undefined : null,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="megaphone" size={size} color={color} />
-          ),
+          tabBarIcon: reportIcon,
         }}
       />
 
@@ -153,9 +219,7 @@ export default function TabLayout() {
         options={{
           title: 'Approvals',
           href: isLeader ? undefined : null,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="checkmark-done-circle" size={size} color={color} />
-          ),
+          tabBarIcon: approvalsIcon,
         }}
       />
 
@@ -165,9 +229,7 @@ export default function TabLayout() {
         options={{
           title: 'Settings',
           href: undefined,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings" size={size} color={color} />
-          ),
+          tabBarIcon: settingsIcon,
         }}
       />
     </Tabs>

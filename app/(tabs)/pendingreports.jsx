@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Modal, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, Image, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import BackIconButton from '../../components/BackIconButton';
 import { getCurrentUser, getRows, getUserProfile, insertRow, updateRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
@@ -11,30 +12,50 @@ const EMERGENCY_SERVICES = [
     id: 'police',
     label: 'Police',
     icon: 'shield',
-    color: '#1D4ED8',
-    bg: '#EFF6FF',
+    color: '#5bc0be',
+    bg: '#1c2541',
     serviceType: 'police',
   },
   {
     id: 'ambulance',
     label: 'Ambulance',
     icon: 'medkit',
-    color: '#059669',
-    bg: '#ECFDF5',
+    color: '#5bc0be',
+    bg: '#1c2541',
     serviceType: 'ambulance',
   },
   {
     id: 'fire',
     label: 'Fire Truck',
     icon: 'flame',
-    color: '#DC2626',
-    bg: '#FEF2F2',
+    color: '#ffffff',
+    bg: '#3a506b',
     serviceType: 'fire',
   },
 ];
 
+const CRIME_CATEGORIES = [
+  { id: 'theft', label: 'Theft', icon: 'pricetag' },
+  { id: 'burglary', label: 'Burglary', icon: 'home' },
+  { id: 'assault', label: 'Assault', icon: 'body' },
+  { id: 'robbery', label: 'Robbery', icon: 'alert-circle' },
+  { id: 'vandalism', label: 'Vandalism', icon: 'hammer' },
+  { id: 'suspicious_activity', label: 'Suspicious Activity', icon: 'eye' },
+  { id: 'other_crime', label: 'Other Crime', icon: 'ellipsis-horizontal' },
+];
+
+const OTHER_CATEGORIES = [
+  { id: 'funeral', label: 'Funeral' },
+  { id: 'wedding', label: 'Wedding' },
+  { id: 'community_event', label: 'Community Event' },
+  { id: 'lost_found', label: 'Lost & Found' },
+  { id: 'noise_complaint', label: 'Noise Complaint' },
+  { id: 'other_event', label: 'Other' },
+];
+
 export default function PendingReportsScreen() {
   const [reports, setReports] = useState([]);
+  const [wardReports, setWardReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState(null);
   const [user, setUser] = useState(null);
@@ -58,24 +79,33 @@ export default function PendingReportsScreen() {
       if (currentUser) {
         const profile = await getUserProfile(currentUser.id);
         setUserProfile(profile);
+        await fetchPendingReports(profile);
+      } else {
+        await fetchPendingReports();
       }
-      await fetchPendingReports();
     };
 
     load();
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
   }, []);
 
-  const fetchPendingReports = async () => {
+  const fetchPendingReports = async (profile = userProfile) => {
     try {
       let reportsData;
+      let wardReportsData;
       
       // Community leaders see pending reports from their ward
-      if (userProfile?.role === 'community_leader' && userProfile?.ward_id) {
+      if (profile?.role === 'community_leader' && profile?.ward_id) {
         reportsData = await getRows('reports', {
           filters: { 
             status: 'pending_review',
-            ward_id: userProfile.ward_id 
+            ward_id: profile.ward_id 
+          },
+        });
+
+        wardReportsData = await getRows('reports', {
+          filters: {
+            ward_id: profile.ward_id,
           },
         });
       } else {
@@ -83,9 +113,11 @@ export default function PendingReportsScreen() {
         reportsData = await getRows('reports', {
           filters: { status: 'pending_review' },
         });
+        wardReportsData = [];
       }
       
-      setReports(reportsData);
+      setReports(reportsData || []);
+      setWardReports(wardReportsData || []);
     } catch (error) {
       console.error('Error fetching reports:', error);
     } finally {
@@ -93,7 +125,6 @@ export default function PendingReportsScreen() {
     }
   };
 
-  // Step 1 — leader taps Approve → open the dispatch service-selection modal
   const openDispatchModal = (report) => {
     setReportToApprove(report);
     setSelectedServices([]);
@@ -108,7 +139,7 @@ export default function PendingReportsScreen() {
     );
   };
 
-  // Step 2 — leader confirms dispatch → write to Supabase
+  //leader confirms dispatch → write to Supabase
   const handleConfirmApprove = async () => {
     if (!reportToApprove) return;
     setDispatching(true);
@@ -116,6 +147,16 @@ export default function PendingReportsScreen() {
     try {
       const now = new Date().toISOString();
       const chosenServices = EMERGENCY_SERVICES.filter((s) => selectedServices.includes(s.id));
+      const reportCrimeCategory = reportToApprove.crimeCategory || reportToApprove.location?.crimeCategory || 'other_crime';
+      const crimeCategoryLabel = CRIME_CATEGORIES.find((category) => category.id === reportCrimeCategory)?.label;
+      const reportOtherCategory = reportToApprove.otherCategory || reportToApprove.location?.otherCategory || 'other_event';
+      const otherCategoryLabel = OTHER_CATEGORIES.find((category) => category.id === reportOtherCategory)?.label;
+      const communityPostTitle =
+        reportToApprove.reportType === 'crime' && reportCrimeCategory !== 'other_crime' && crimeCategoryLabel
+          ? `${crimeCategoryLabel.toUpperCase()} ALERT: Verified Incident`
+          : reportToApprove.reportType === 'other' && reportOtherCategory !== 'other_event' && otherCategoryLabel
+          ? `${otherCategoryLabel.toUpperCase()} UPDATE: Verified Incident`
+          : `${reportToApprove.reportType?.toUpperCase() || 'INCIDENT'} ALERT: Verified Incident`;
 
       // 1. Update the report document
       await updateRow('reports', reportToApprove.id, {
@@ -133,7 +174,7 @@ export default function PendingReportsScreen() {
             : reportToApprove.reportType === 'hazard'
             ? 'emergency_notice'
             : 'service_update',
-        title: `${reportToApprove.reportType?.toUpperCase()} ALERT: Verified Incident`,
+        title: communityPostTitle,
         description: reportToApprove.description,
         createdBy: user?.id,
         createdByName: 'Community Safety Team',
@@ -141,7 +182,6 @@ export default function PendingReportsScreen() {
         status: 'approved',
         priority: 'high',
         sourceReportId: reportToApprove.id,
-        // Add ward_id and suburb_id from the report
         ward_id: reportToApprove.ward_id,
         suburb_id: reportToApprove.suburb_id,
       });
@@ -158,7 +198,6 @@ export default function PendingReportsScreen() {
           dispatchedBy: user?.id,
           status: 'pending',
           acknowledged: false,
-          // Add location IDs
           ward_id: reportToApprove.ward_id,
           suburb_id: reportToApprove.suburb_id,
         });
@@ -194,7 +233,39 @@ export default function PendingReportsScreen() {
     }
   };
 
-  // ─── Report Card ──────────────────────────────────────────────────────────
+  const getReportCrimeCategory = (report) => (
+    report?.crimeCategory || report?.location?.crimeCategory || 'other_crime'
+  );
+
+  const getCrimeCategoryLabel = (value) => (
+    CRIME_CATEGORIES.find((category) => category.id === value)?.label || 'Other Crime'
+  );
+
+  const getReportOtherCategory = (report) => (
+    report?.otherCategory || report?.location?.otherCategory || 'other_event'
+  );
+
+  const getOtherCategoryLabel = (value) => (
+    OTHER_CATEGORIES.find((category) => category.id === value)?.label || 'Other'
+  );
+
+  const getReportPhotos = (report) => (
+    Array.isArray(report?.photoUrls)
+      ? report.photoUrls.filter(Boolean)
+      : []
+  );
+
+  const crimeMatrix = CRIME_CATEGORIES.map((category) => ({
+    ...category,
+    count: wardReports.filter((report) => (
+      report.reportType === 'crime'
+      && getReportCrimeCategory(report) === category.id
+    )).length,
+  }));
+
+  const totalCrimeReports = crimeMatrix.reduce((total, category) => total + category.count, 0);
+
+  // ─── Report Card ────────────────────────────────────────────────────
   const ReportCard = ({ report }) => {
     const scaleValue = useRef(new Animated.Value(1)).current;
     const translateY = useRef(new Animated.Value(0)).current;
@@ -215,10 +286,10 @@ export default function PendingReportsScreen() {
 
     const getReportColor = (type) => {
       switch (type) {
-        case 'crime': return ['#DC2626', '#991B1B'];
-        case 'hazard': return ['#F59E0B', '#D97706'];
-        case 'infrastructure': return ['#6D28D9', '#8B5CF6'];
-        default: return ['#00A896', '#02C39A'];
+        case 'crime': return ['#3a506b', '#0b132b'];
+        case 'hazard': return ['#1c2541', '#3a506b'];
+        case 'infrastructure': return ['#0b132b', '#5bc0be'];
+        default: return ['#1c2541', '#5bc0be'];
       }
     };
 
@@ -262,6 +333,16 @@ export default function PendingReportsScreen() {
                       Ward {report.ward_id}
                     </Text>
                   )}
+                  {report.reportType === 'crime' && (
+                    <Text style={{ fontSize: 10, color: '#fff', opacity: 0.8, marginTop: 2 }}>
+                      {getCrimeCategoryLabel(getReportCrimeCategory(report))}
+                    </Text>
+                  )}
+                  {report.reportType === 'other' && (
+                    <Text style={{ fontSize: 10, color: '#fff', opacity: 0.8, marginTop: 2 }}>
+                      {getOtherCategoryLabel(getReportOtherCategory(report))}
+                    </Text>
+                  )}
                 </View>
               </View>
 
@@ -269,13 +350,13 @@ export default function PendingReportsScreen() {
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <TouchableOpacity
                   onPress={() => openDispatchModal(report)}
-                  style={{ backgroundColor: '#10B981', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 }}
+                  style={{ backgroundColor: '#5bc0be', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 }}
                 >
                   <Ionicons name="checkmark" size={18} color="#fff" />
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => handleReject(report.id)}
-                  style={{ backgroundColor: '#EF4444', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 }}
+                  style={{ backgroundColor: '#3a506b', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 }}
                 >
                   <Ionicons name="close" size={18} color="#fff" />
                 </TouchableOpacity>
@@ -291,7 +372,7 @@ export default function PendingReportsScreen() {
     );
   };
 
-  // ─── Loading ──────────────────────────────────────────────────────────────
+  //Loading 
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
@@ -300,22 +381,23 @@ export default function PendingReportsScreen() {
     );
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────
+  //Render
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
+      <BackIconButton />
       <Animated.ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
 
         {/* HEADER */}
         <LinearGradient
-          colors={[colors.gradient1 || '#6D28D9', colors.gradient2 || '#F43F5E']}
+          colors={[colors.gradient1 || '#1c2541', colors.gradient2 || '#5bc0be']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={{ padding: 28, paddingTop: 50, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }}
+          style={{ padding: 28, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }}
         >
           <Animated.View style={{ opacity: fadeAnim }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <View>
-                <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#fff' }}>Pending Reports 📋</Text>
+                <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#fff' }}>Pending Reports</Text>
                 <Text style={{ fontSize: 14, color: '#fff', opacity: 0.9, marginTop: 8 }}>
                   {reports.length} reports awaiting review
                 </Text>
@@ -332,6 +414,60 @@ export default function PendingReportsScreen() {
           </Animated.View>
         </LinearGradient>
 
+        {userProfile?.role === 'community_leader' && (
+          <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+            <View
+              style={{
+                backgroundColor: colors.surface,
+                borderRadius: 12,
+                padding: 16,
+                borderWidth: 1,
+                borderColor: colors.border
+              }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <View>
+                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>
+                    Crime Matrix
+                  </Text>
+                  <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 2 }}>
+                    {totalCrimeReports} crime reports created in your ward
+                  </Text>
+                </View>
+                <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="grid" size={22} color={colors.accent} />
+                </View>
+              </View>
+
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                {crimeMatrix.map((category) => (
+                  <View
+                    key={category.id}
+                    style={{
+                      width: '47%',
+                      backgroundColor: colors.background,
+                      borderRadius: 10,
+                      padding: 12,
+                      borderWidth: 1,
+                      borderColor: colors.border
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <Ionicons name={category.icon} size={18} color={colors.accent} />
+                      <Text style={{ flex: 1, color: colors.text, fontWeight: '600', fontSize: 12 }}>
+                        {category.label}
+                      </Text>
+                    </View>
+                    <Text style={{ color: colors.accent, fontSize: 24, fontWeight: 'bold' }}>
+                      {category.count}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* REPORTS LIST */}
         <View style={{ padding: 16 }}>
           {reports.length === 0 ? (
@@ -340,7 +476,7 @@ export default function PendingReportsScreen() {
               style={{ borderRadius: 24, padding: 50, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}
             >
               <Ionicons name="checkmark-circle" size={60} color={colors.accent} />
-              <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginTop: 16 }}>All Clear! ✨</Text>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginTop: 16 }}>All Clear!</Text>
               <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 8, textAlign: 'center' }}>
                 No pending reports in your ward
               </Text>
@@ -351,7 +487,7 @@ export default function PendingReportsScreen() {
         </View>
       </Animated.ScrollView>
 
-      {/* ── DETAIL MODAL ─────────────────────────────────────────────────── */}
+      {/* DETAIL MODAL  */}
       <Modal visible={detailModalVisible} animationType="slide" transparent={true}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' }}>
           <LinearGradient
@@ -372,6 +508,16 @@ export default function PendingReportsScreen() {
                   <Text style={{ fontSize: 18, color: colors.text, marginTop: 4, fontWeight: '600' }}>
                     {selectedReport.reportType?.toUpperCase()}
                   </Text>
+                  {selectedReport.reportType === 'crime' && (
+                    <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 4 }}>
+                      {getCrimeCategoryLabel(getReportCrimeCategory(selectedReport))}
+                    </Text>
+                  )}
+                  {selectedReport.reportType === 'other' && (
+                    <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 4 }}>
+                      {getOtherCategoryLabel(getReportOtherCategory(selectedReport))}
+                    </Text>
+                  )}
                 </View>
 
                 <View style={{ marginBottom: 20 }}>
@@ -380,6 +526,33 @@ export default function PendingReportsScreen() {
                     {selectedReport.description}
                   </Text>
                 </View>
+
+                {getReportPhotos(selectedReport).length > 0 && (
+                  <View style={{ marginBottom: 20 }}>
+                    <Text style={{ fontSize: 14, color: colors.accent, fontWeight: 'bold', marginBottom: 10 }}>
+                      PHOTOS
+                    </Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View style={{ flexDirection: 'row', gap: 10 }}>
+                        {getReportPhotos(selectedReport).map((uri, index) => (
+                          <Image
+                            key={`${uri}-${index}`}
+                            source={{ uri }}
+                            style={{
+                              width: 150,
+                              height: 110,
+                              borderRadius: 14,
+                              backgroundColor: colors.surfaceRaised,
+                              borderWidth: 1,
+                              borderColor: colors.border
+                            }}
+                            resizeMode="cover"
+                          />
+                        ))}
+                      </View>
+                    </ScrollView>
+                  </View>
+                )}
 
                 <View style={{ marginBottom: 20 }}>
                   <Text style={{ fontSize: 14, color: colors.accent, fontWeight: 'bold' }}>LOCATION</Text>
@@ -396,13 +569,13 @@ export default function PendingReportsScreen() {
                 <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
                   <TouchableOpacity
                     onPress={() => openDispatchModal(selectedReport)}
-                    style={{ flex: 1, backgroundColor: '#10B981', padding: 14, borderRadius: 16, alignItems: 'center' }}
+                    style={{ flex: 1, backgroundColor: '#5bc0be', padding: 14, borderRadius: 16, alignItems: 'center' }}
                   >
                     <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Approve</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => handleReject(selectedReport.id)}
-                    style={{ flex: 1, backgroundColor: '#EF4444', padding: 14, borderRadius: 16, alignItems: 'center' }}
+                    style={{ flex: 1, backgroundColor: '#3a506b', padding: 14, borderRadius: 16, alignItems: 'center' }}
                   >
                     <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Reject</Text>
                   </TouchableOpacity>
@@ -413,7 +586,7 @@ export default function PendingReportsScreen() {
         </View>
       </Modal>
 
-      {/* ── DISPATCH MODAL ───────────────────────────────────────────────── */}
+      {/* DISPATCH MODAL */}
       <Modal visible={dispatchModalVisible} animationType="slide" transparent={true}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
           <View style={{
@@ -426,8 +599,8 @@ export default function PendingReportsScreen() {
             <View style={{ width: 40, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: 20 }} />
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="radio" size={20} color="#D97706" />
+              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#1c2541', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="radio" size={20} color="#5bc0be" />
               </View>
               <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text }}>Dispatch Services</Text>
             </View>
@@ -474,7 +647,7 @@ export default function PendingReportsScreen() {
                       borderRadius: 12,
                       borderWidth: 2,
                       borderColor: isSelected ? service.color : colors.border,
-                      backgroundColor: isSelected ? service.color : 'transparent',
+                      backgroundColor: isSelected ? service.color : 'rgba(255,255,255,0)',
                       justifyContent: 'center',
                       alignItems: 'center',
                     }}>
@@ -487,8 +660,8 @@ export default function PendingReportsScreen() {
 
             {selectedServices.length === 0 && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16, backgroundColor: '#FFF7ED', borderRadius: 10, padding: 10 }}>
-                <Ionicons name="information-circle" size={18} color="#D97706" />
-                <Text style={{ fontSize: 12, color: '#D97706', flex: 1 }}>
+                <Ionicons name="information-circle" size={18} color="#5bc0be" />
+                <Text style={{ fontSize: 12, color: '#5bc0be', flex: 1 }}>
                   No services selected — the report will still be approved and posted to the community feed.
                 </Text>
               </View>
@@ -506,7 +679,7 @@ export default function PendingReportsScreen() {
               <TouchableOpacity
                 style={{
                   flex: 2,
-                  backgroundColor: '#10B981',
+                  backgroundColor: '#5bc0be',
                   borderRadius: 14,
                   padding: 14,
                   alignItems: 'center',
@@ -538,3 +711,4 @@ export default function PendingReportsScreen() {
     </SafeAreaView>
   );
 }
+

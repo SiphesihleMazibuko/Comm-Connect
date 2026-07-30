@@ -171,6 +171,8 @@ create table if not exists public.reports (
   "userId" uuid references auth.users(id) on delete set null,
   "submittedBy" uuid not null references auth.users(id) on delete cascade,
   "reportType" text not null,
+  "crimeCategory" text,
+  "otherCategory" text,
   description text not null,
   "photoUrls" text[] not null default array[]::text[],
   location jsonb,
@@ -181,6 +183,9 @@ create table if not exists public.reports (
   "approvedBy" uuid references auth.users(id) on delete set null,
   "dispatchedServices" text[] not null default array[]::text[]
 );
+
+alter table public.reports add column if not exists "crimeCategory" text;
+alter table public.reports add column if not exists "otherCategory" text;
 
 alter table public.reports enable row level security;
 

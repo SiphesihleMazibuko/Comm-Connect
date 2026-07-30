@@ -33,7 +33,7 @@ export default function DramaticButton({
   const gradients = {
     primary: [colors.gradient1, colors.gradient2],
     secondary: [colors.gradient2, colors.gradient3],
-    danger: ['#DC2626', '#991B1B'],
+    danger: ['#3a506b', '#0b132b'],
   };
 
   return (

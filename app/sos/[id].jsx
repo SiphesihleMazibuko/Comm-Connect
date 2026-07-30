@@ -4,6 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import BackIconButton from '../../components/BackIconButton';
 import { getRow, subscribeToTable } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
@@ -55,7 +56,8 @@ export default function SosTrackingScreen() {
   );
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
+      <BackIconButton />
       <ScrollView contentContainerStyle={{ padding: 18 }}>
         <View style={{ backgroundColor: colors.error, borderRadius: 12, padding: 18, alignItems: 'center', marginBottom: 16 }}>
           <Ionicons name="alert-circle" size={42} color="#fff" />

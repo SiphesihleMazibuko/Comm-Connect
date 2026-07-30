@@ -171,7 +171,7 @@ export default function SignupDetailsStep({
                     padding: 14,
                     borderBottomWidth: 0.5,
                     borderBottomColor: colors.border,
-                    backgroundColor: selectedCountry.code === country.code && selectedCountry.name === country.name ? colors.background : 'transparent',
+                    backgroundColor: selectedCountry.code === country.code && selectedCountry.name === country.name ? colors.background : 'rgba(255,255,255,0)',
                   }}
                 >
                   <Text style={{ fontSize: 20 }}>{country.flag}</Text>
