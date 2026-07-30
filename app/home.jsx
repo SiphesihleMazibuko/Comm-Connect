@@ -206,7 +206,7 @@ export default function HomeScreen() {
         <TouchableOpacity onPress={() => router.push('communityfeed')}>
           <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View>
-              <Text style={{ fontSize: 14, color: colors.error, fontWeight: 'bold' }}>⚠️ Crime Alert</Text>
+              <Text style={{ fontSize: 14, color: colors.error, fontWeight: 'bold' }}>Crime Alert</Text>
               <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 4 }}>View all community updates →</Text>
             </View>
             <Ionicons name="arrow-forward" size={20} color={colors.accent} />
