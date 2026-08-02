@@ -201,7 +201,7 @@ export default function HomeScreen() {
       </View>
 
       {/* Recent Alerts Preview */}
-      <View style={{ padding: 16 }}>
+      <View style={{ padding: 18 }}>
         <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text, marginBottom: 16 }}>Recent Alerts</Text>
         <TouchableOpacity onPress={() => router.push('communityfeed')}>
           <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
