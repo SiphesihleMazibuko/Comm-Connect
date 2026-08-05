@@ -41,7 +41,6 @@
       ],
       "expo-web-browser",
       "expo-notifications",
-      "react-native-bottom-tabs",
       [
         "expo-build-properties",
         {
@@ -49,7 +48,8 @@
             "useFrameworks": "static"
           }
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,

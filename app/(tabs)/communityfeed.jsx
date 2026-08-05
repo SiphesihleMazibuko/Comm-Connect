@@ -1,8 +1,22 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
+import {
+  Ionicons } from '@expo/vector-icons';
+import { useCallback,
+  useEffect,
+  useState } from 'react';
+import { ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TextInput,
+  View
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import BackIconButton from '../../components/BackIconButton';
+import ScreenHeader from '../../components/ScreenHeader';
 import colors from '../../Utils/colors';
 import { getCurrentUser, getRows, getUserProfile, insertRow, subscribeToTable, updateRow } from '../../config/supabase';
 
@@ -229,7 +243,6 @@ export default function CommunityFeedScreen() {
         createdAt: new Date().toISOString(),
         status: 'approved',
         priority: newPost.type === 'crime_alert' ? 'high' : 'normal',
-        // Add ward_id to posts for filtering
         ward_id: userProfile?.ward_id || null,
         suburb_id: userProfile?.suburb_id || null,
       });
@@ -275,33 +288,31 @@ export default function CommunityFeedScreen() {
 
   return (
     <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
-      <BackIconButton />
       <View style={{ flex: 1, backgroundColor: colors.background }}>
 
-        {/* Header */}
-        <View style={{ backgroundColor: colors.primary, padding: 20 }}>
-          <Text style={{ fontSize: 14, color: '#fff', opacity: 0.8 }}>{wardTitle}</Text>
-          <Text style={{ fontSize: 12, color: '#fff', opacity: 0.7, marginTop: 4 }}>
-            {wardLocation || (wardDetails ? 'Your community updates' : 'Add your ward to see local updates')}
-          </Text>
-        </View>
+        <ScreenHeader
+          title="Community Feed"
+          subtitle={wardTitle}
+          meta={wardLocation || (wardDetails ? 'Your community updates' : 'Add your ward to see local updates')}
+          icon="newspaper"
+        />
 
 
         {/* Stats row */}
         <View style={{ flexDirection: 'row', margin: 16, gap: 12 }}>
           <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
             <Ionicons name="alert-circle" size={24} color={colors.error} />
-            <Text style={{ fontSize: 14, fontWeight: 'bold', marginTop: 4, color: colors.gradient2 }}>{getElapsedTime(latestAlerts.crime_alert, now)}</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', marginTop: 4, color: colors.text }}>{getElapsedTime(latestAlerts.crime_alert, now)}</Text>
             <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center' }}>Last Ward Crime Reported</Text>
           </View>
           <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
             <Ionicons name="warning" size={24} color={colors.warning} />
-            <Text style={{ fontSize: 14, fontWeight: 'bold', marginTop: 4, color: colors.gradient2 }}>{getElapsedTime(latestAlerts.emergency_notice, now)}</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', marginTop: 4, color: colors.text }}>{getElapsedTime(latestAlerts.emergency_notice, now)}</Text>
             <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center' }}>Last Ward Emergency Notice</Text>
           </View>
           <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
             <Ionicons name="construct" size={24} color={colors.accent} />
-            <Text style={{ fontSize: 14, fontWeight: 'bold', marginTop: 4, color: colors.gradient2 }}>{getElapsedTime(latestAlerts.service_update, now)}</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', marginTop: 4, color: colors.text }}>{getElapsedTime(latestAlerts.service_update, now)}</Text>
             <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center' }}>Last Ward Service Update</Text>
           </View>
         </View>

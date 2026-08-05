@@ -1,4 +1,5 @@
-import { TouchableOpacity, Text, ActivityIndicator, Animated } from 'react-native';
+import TouchableOpacity from './FeedbackTouchableOpacity';
+import { Text, ActivityIndicator, Animated } from 'react-native';
 import { useState, useRef } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import colors from '../Utils/colors';

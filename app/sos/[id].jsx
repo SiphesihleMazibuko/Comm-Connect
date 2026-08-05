@@ -1,8 +1,16 @@
-import { Ionicons } from '@expo/vector-icons';
+import {
+  Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback,
+  useEffect,
+  useState } from 'react';
+import { ActivityIndicator,
+  ScrollView,
+  Text,
+  View
+} from 'react-native';
+import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BackIconButton from '../../components/BackIconButton';
 import { getRow, subscribeToTable } from '../../config/supabase';
@@ -13,6 +21,14 @@ const formatTime = (value) => {
   return new Date(value).toLocaleString();
 };
 
+const isValidRemoteId = (value) => (
+  value !== null
+  && value !== undefined
+  && `${value}`.trim() !== ''
+  && `${value}`.trim().toLowerCase() !== 'null'
+  && `${value}`.trim().toLowerCase() !== 'undefined'
+);
+
 export default function SosTrackingScreen() {
   const { id } = useLocalSearchParams();
   const alertId = Array.isArray(id) ? id[0] : id;
@@ -20,7 +36,11 @@ export default function SosTrackingScreen() {
   const [loading, setLoading] = useState(true);
 
   const loadAlert = useCallback(async () => {
-    if (!alertId) return;
+    if (!isValidRemoteId(alertId)) {
+      setAlert(null);
+      setLoading(false);
+      return;
+    }
 
     try {
       const row = await getRow('emergencyRequests', alertId);
@@ -33,6 +53,11 @@ export default function SosTrackingScreen() {
   }, [alertId]);
 
   useEffect(() => {
+    if (!isValidRemoteId(alertId)) {
+      setLoading(false);
+      return undefined;
+    }
+
     loadAlert();
     const poll = setInterval(loadAlert, 10000);
     const unsubscribe = subscribeToTable('emergencyRequests', (payload) => {

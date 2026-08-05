@@ -1,4 +1,5 @@
-import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, TextInput, View } from 'react-native';
+import TouchableOpacity from '../FeedbackTouchableOpacity';
 import colors from '../../Utils/colors';
 import { inputStyle, labelStyle, subLabelStyle } from './styles';
 

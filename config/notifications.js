@@ -1,18 +1,34 @@
-  import * as Linking from 'expo-linking';
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
 
 const log = (...args) => console.log('[SOSNotifications]', ...args);
 const warn = (...args) => console.warn('[SOSNotifications]', ...args);
+
+const isAndroidExpoGo = Platform.OS === 'android' && Constants.appOwnership === 'expo';
+
+let notificationsModulePromise = null;
+
+const getNotificationsModule = async () => {
+  if (Platform.OS === 'web' || isAndroidExpoGo) return null;
+
+  if (!notificationsModulePromise) {
+    notificationsModulePromise = import('expo-notifications').then((Notifications) => {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        }),
+      });
+
+      return Notifications;
+    });
+  }
+
+  return notificationsModulePromise;
+};
 
 const cleanPhone = (value = '') => value.replace(/[^\d+]/g, '');
 
@@ -48,7 +64,8 @@ export const notifyEmergencyContactsBySms = async ({ contacts, alert, trackingUr
 };
 
 export const showLocalSosNotification = async (alertId) => {
-  if (Platform.OS === 'web') return;
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) return;
 
   try {
     await Notifications.scheduleNotificationAsync({

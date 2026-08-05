@@ -1,6 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRouter } from 'expo-router';
-import { Platform, StatusBar, TouchableOpacity } from 'react-native';
+import {
+  Ionicons } from '@expo/vector-icons';
+import { useNavigation,
+  useRouter } from 'expo-router';
+import { Platform,
+  StatusBar
+} from 'react-native';
+import TouchableOpacity from './FeedbackTouchableOpacity';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../Utils/colors';
 

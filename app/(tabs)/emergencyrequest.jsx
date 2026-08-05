@@ -1,17 +1,20 @@
-import { Ionicons } from "@expo/vector-icons";
+import {
+  Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect,
+  useRef,
+  useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
   Text,
   TextInput,
-  TouchableOpacity,
   View
 } from "react-native";
+import TouchableOpacity from "../../components/FeedbackTouchableOpacity";
 import { SafeAreaView } from "react-native-safe-area-context";
-import BackIconButton from "../../components/BackIconButton";
+import ScreenHeader from "../../components/ScreenHeader";
 import {
   getCurrentUser,
   getRows,
@@ -152,7 +155,7 @@ export default function EmergencyRequestScreen() {
     if (!selectedPinpoint) {
       Alert.alert(
         "No Location Selected",
-        "Please save a PinPoint address first so responders can find you.",
+        "Please save a PinPoint address first so Community Protection Services can find you.",
         [
           {
             text: "Go to PinPoint",
@@ -192,7 +195,7 @@ export default function EmergencyRequestScreen() {
 
       Alert.alert(
         "Emergency Request Sent",
-        "Help is on the way. Emergency responders have been notified.",
+        "Help is on the way. Community Protection Services have been notified.",
         [
           {
             text: "OK",
@@ -244,33 +247,12 @@ export default function EmergencyRequestScreen() {
 
   return (
     <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
-      <BackIconButton />
       <Animated.ScrollView style={{ flex: 1, opacity: fadeAnim }}>
-        {/* Header */}
-        <View
-          style={{
-            backgroundColor: colors.error,
-            padding: 24,
-            alignItems: "center",
-          }}
-        >
-          <Ionicons name="alert-circle" size={50} color="#fff" />
-          <Text
-            style={{
-              fontSize: 24,
-              fontWeight: "bold",
-              color: "#fff",
-              marginTop: 10,
-            }}
-          >
-            Emergency Request
-          </Text>
-          <Text style={{ fontSize: 14, color: "#fff", opacity: 0.8 }}>
-            {userProfile?.ward_number
-              ? `Ward ${userProfile.ward_number}`
-              : "Your location will be shared"}
-          </Text>
-        </View>
+        <ScreenHeader
+          title="Emergency Request"
+          subtitle={userProfile?.ward_number ? `Ward ${userProfile.ward_number}` : "Your location will be shared"}
+          icon="alert-circle"
+        />
 
         <View style={{ padding: 16 }}>
           {/* Emergency Type */}
@@ -376,7 +358,7 @@ export default function EmergencyRequestScreen() {
               borderColor: colors.border,
               color: colors.text,
             }}
-            placeholder="Phone number for responders to reach you"
+            placeholder="Phone number for CPS to reach you"
             placeholderTextColor={colors.textLight}
             selectionColor={colors.accent}
             value={contactDetails}
@@ -413,7 +395,7 @@ export default function EmergencyRequestScreen() {
                 ⚠️ No PinPoint Address Found
               </Text>
               <Text style={{ color: colors.textLight, marginTop: 8 }}>
-                Save a PinPoint address first so responders can find you.
+                Save a PinPoint address first so Community Protection Services can find you.
               </Text>
               <TouchableOpacity
                 style={{

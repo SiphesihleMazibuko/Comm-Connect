@@ -1,4 +1,5 @@
-import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Text, TextInput, View } from 'react-native';
+import TouchableOpacity from '../FeedbackTouchableOpacity';
 import colors from '../../Utils/colors';
 import SignupLocationSelector from './SignupLocationSelector';
 import { inputStyle, labelStyle } from './styles';
@@ -29,8 +30,8 @@ export default function SignupDetailsStep({
   setLocation,
   organizationName,
   setOrganizationName,
-  responderType,
-  setResponderType,
+  cpsWardName,
+  setCpsWardName,
   loading,
   onSendOtp,
   locationSelectorProps,
@@ -216,7 +217,7 @@ export default function SignupDetailsStep({
               multiline
             />
             <Text style={{ fontSize: 11, color: colors.textLight, marginTop: 4 }}>
-              Help emergency responders find you
+              Help community protection services find you
             </Text>
           </View>
 
@@ -234,16 +235,16 @@ export default function SignupDetailsStep({
             </View>
           )}
 
-          {selectedRole === 'emergency_responder' && (
+          {selectedRole === 'community_protection_service' && (
             <View style={{ marginBottom: 12 }}>
-              <Text style={labelStyle}>Responder Type</Text>
+              <Text style={labelStyle}>Ward Name</Text>
               <TextInput
                 style={inputStyle}
-                placeholder="e.g. Police, Ambulance, Fire, Security"
+                placeholder="e.g. Ward 12 Community Protection"
                 placeholderTextColor={colors.textLight}
                 selectionColor={colors.accent}
-                value={responderType}
-                onChangeText={setResponderType}
+                value={cpsWardName}
+                onChangeText={setCpsWardName}
               />
             </View>
           )}

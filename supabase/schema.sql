@@ -13,11 +13,26 @@ create table if not exists public.users (
   "organizationName" text,
   "responderType" text,
   "serviceType" text,
+  "wardName" text,
+  province_id uuid,
+  city_id uuid,
+  suburb_id uuid,
+  zone_id uuid,
+  ward_id uuid,
   permissions jsonb not null default '{}'::jsonb,
   language text not null default 'en',
   "createdAt" timestamptz not null default now(),
   "isMockUser" boolean not null default false
 );
+
+alter table public.users add column if not exists "wardName" text;
+alter table public.users add column if not exists "serviceType" text;
+alter table public.users add column if not exists "responderType" text;
+alter table public.users add column if not exists province_id uuid;
+alter table public.users add column if not exists city_id uuid;
+alter table public.users add column if not exists suburb_id uuid;
+alter table public.users add column if not exists zone_id uuid;
+alter table public.users add column if not exists ward_id uuid;
 
 alter table public.users enable row level security;
 
@@ -103,6 +118,8 @@ create table if not exists public.posts (
 
 alter table public.posts add column if not exists "archivedAt" timestamptz;
 alter table public.posts add column if not exists "archivedBy" uuid references auth.users(id) on delete set null;
+alter table public.posts add column if not exists ward_id uuid;
+alter table public.posts add column if not exists suburb_id uuid;
 
 alter table public.posts enable row level security;
 
@@ -186,6 +203,8 @@ create table if not exists public.reports (
 
 alter table public.reports add column if not exists "crimeCategory" text;
 alter table public.reports add column if not exists "otherCategory" text;
+alter table public.reports add column if not exists ward_id uuid;
+alter table public.reports add column if not exists suburb_id uuid;
 
 alter table public.reports enable row level security;
 
@@ -230,6 +249,8 @@ create table if not exists public.emergency_dispatches (
 );
 
 alter table public.emergency_dispatches enable row level security;
+alter table public.emergency_dispatches add column if not exists ward_id uuid;
+alter table public.emergency_dispatches add column if not exists suburb_id uuid;
 
 drop policy if exists "Authenticated users can read dispatches" on public.emergency_dispatches;
 create policy "Authenticated users can read dispatches"
@@ -253,6 +274,58 @@ to authenticated
 using (true)
 with check (true);
 
+create table if not exists public.cps_duty_sessions (
+  id uuid primary key default gen_random_uuid(),
+  "userId" uuid not null references auth.users(id) on delete cascade,
+  "memberName" text,
+  ward_id uuid,
+  "wardName" text,
+  "clockedInAt" timestamptz not null default now(),
+  "clockedOffAt" timestamptz,
+  status text not null default 'on_duty'
+);
+
+alter table public.cps_duty_sessions enable row level security;
+
+drop policy if exists "CPS members can read ward duty sessions" on public.cps_duty_sessions;
+create policy "CPS members can read ward duty sessions"
+on public.cps_duty_sessions
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.users
+    where users.id = auth.uid()
+      and users.role in ('community_protection_service', 'emergency_responder')
+      and users.ward_id = cps_duty_sessions.ward_id
+  )
+);
+
+drop policy if exists "CPS members can clock themselves in" on public.cps_duty_sessions;
+create policy "CPS members can clock themselves in"
+on public.cps_duty_sessions
+for insert
+to authenticated
+with check (
+  "userId" = auth.uid()
+  and exists (
+    select 1
+    from public.users
+    where users.id = auth.uid()
+      and users.role in ('community_protection_service', 'emergency_responder')
+      and users.ward_id = cps_duty_sessions.ward_id
+  )
+);
+
+drop policy if exists "CPS members can update their own duty session" on public.cps_duty_sessions;
+create policy "CPS members can update their own duty session"
+on public.cps_duty_sessions
+for update
+to authenticated
+using ("userId" = auth.uid())
+with check ("userId" = auth.uid());
+
 create table if not exists public."emergencyRequests" (
   id uuid primary key default gen_random_uuid(),
   "userId" uuid references auth.users(id) on delete set null,
@@ -272,6 +345,8 @@ create table if not exists public."emergencyRequests" (
 );
 
 alter table public."emergencyRequests" enable row level security;
+alter table public."emergencyRequests" add column if not exists ward_id uuid;
+alter table public."emergencyRequests" add column if not exists suburb_id uuid;
 
 drop policy if exists "Authenticated users can read emergency requests" on public."emergencyRequests";
 create policy "Authenticated users can read emergency requests"
@@ -301,6 +376,7 @@ grant select, insert, update, delete on public.pinpoints to authenticated;
 grant select, insert, update, delete on public.posts to authenticated;
 grant select, insert, update on public.reports to authenticated;
 grant select, insert, update on public.emergency_dispatches to authenticated;
+grant select, insert, update on public.cps_duty_sessions to authenticated;
 grant select, insert, update on public."emergencyRequests" to authenticated;
 
 notify pgrst, 'reload schema';

@@ -36,6 +36,7 @@ const createStorage = () => {
         try {
           return Promise.resolve(localStorage.getItem(key));
         } catch (e) {
+          console.log(e,"localStorage getItem error");
           return Promise.resolve(null);
         }
       },
@@ -44,6 +45,7 @@ const createStorage = () => {
           localStorage.setItem(key, value);
           return Promise.resolve();
         } catch (e) {
+          console.log(e,"localStorage setItem error");
           return Promise.resolve();
         }
       },
@@ -52,6 +54,7 @@ const createStorage = () => {
           localStorage.removeItem(key);
           return Promise.resolve();
         } catch (e) {
+        console.log(e,"localStorage removeItem error");
           return Promise.resolve();
         }
       },
@@ -64,6 +67,8 @@ const createStorage = () => {
     return AsyncStorage;
   } catch (e) {
     console.warn("AsyncStorage not available, using memory storage");
+  console.log(e, "AsyncStorage not available, using memory storage");
+    
     return {
       getItem: (key) => Promise.resolve(null),
       setItem: (key, value) => Promise.resolve(),
@@ -110,6 +115,12 @@ const applyEqFilters = (query, options = {}) => {
     });
   }
 
+  if (options.neq) {
+    options.neq.forEach(({ column, value }) => {
+      query = query.neq(column, value);
+    });
+  }
+
   return query;
 };
 
@@ -123,6 +134,11 @@ const isLikelyNetworkError = (error) => {
     message.includes("load failed")
   );
 };
+
+export const isMissingSchemaRelation = (error) => (
+  error?.code === "PGRST205"
+  || `${error?.message || ""}`.includes("Could not find the table")
+);
 
 // GET CURRENT USER
 export const getCurrentUser = async () => {
@@ -178,6 +194,12 @@ export const getRows = async (table, options = {}) => {
     offlineLog(`getRows(${table}): fetched ${data?.length || 0} remote row(s), cached locally.`);
     return data || [];
   } catch (error) {
+    if (options.allowMissingTable && isMissingSchemaRelation(error)) {
+      options.onMissingTable?.(error);
+      offlineWarn(`getRows(${table}): table is not available in the Supabase schema cache yet.`);
+      return [];
+    }
+
     console.error(`Error getting rows from ${table}:`, error);
     offlineWarn(`getRows(${table}): falling back to local cache.`);
     return await getLocalRows(table, options);
@@ -234,6 +256,25 @@ const retryWithoutMissingColumn = async ({ table, data, error, runQuery }) => {
   const { [missingColumn]: _missingColumn, ...fallbackData } = data;
   offlineWarn(`${table}: retrying without missing schema column "${missingColumn}".`);
   return await runQuery(fallbackData);
+};
+
+const runWithMissingColumnRetries = async ({ table, data, runQuery }) => {
+  let payload = data;
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      return await runQuery(payload);
+    } catch (error) {
+      const missingColumn = getMissingSchemaColumn(error);
+      if (!missingColumn || !payload || !(missingColumn in payload)) throw error;
+
+      const { [missingColumn]: _missingColumn, ...fallbackPayload } = payload;
+      payload = fallbackPayload;
+      offlineWarn(`${table}: retrying without missing schema column "${missingColumn}".`);
+    }
+  }
+
+  return await runQuery(payload);
 };
 
 export const insertRow = async (table, data) => {
@@ -441,27 +482,47 @@ export const upsertRow = async (table, data) => {
       }
 
       if (existing) {
-        const { data: updated, error: updateError } = await client
-          .from(table)
-          .update(data)
-          .eq("id", data.id)
-          .select()
-          .single();
+        const runUpdate = async (updatePayload) => {
+          const { data: updated, error: updateError } = await client
+            .from(table)
+            .update(updatePayload)
+            .eq("id", data.id)
+            .select()
+            .single();
 
-        if (updateError) throw updateError;
+          if (updateError) throw updateError;
+          return updated;
+        };
+
+        const updated = await runWithMissingColumnRetries({
+          table,
+          data,
+          runQuery: runUpdate,
+        });
+
         await cacheRow(table, updated);
         offlineLog(`upsertRow(${table}/${data.id}): updated remotely and cached locally.`);
         return updated;
       }
     }
 
-    const { data: inserted, error: insertError } = await client
-      .from(table)
-      .insert(data)
-      .select()
-      .single();
+    const runInsert = async (insertPayload) => {
+      const { data: inserted, error: insertError } = await client
+        .from(table)
+        .insert(insertPayload)
+        .select()
+        .single();
 
-    if (insertError) throw insertError;
+      if (insertError) throw insertError;
+      return inserted;
+    };
+
+    const inserted = await runWithMissingColumnRetries({
+      table,
+      data,
+      runQuery: runInsert,
+    });
+
     await cacheRow(table, inserted);
     offlineLog(`upsertRow(${table}): inserted remotely and cached ${inserted?.id || "new row"}.`);
     return inserted;

@@ -1,16 +1,27 @@
-import { Ionicons } from '@expo/vector-icons';
+import {
+  Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Modal, ScrollView, Text, TouchableOpacity, View, Vibration } from 'react-native';
+import { useEffect,
+  useRef,
+  useState } from 'react';
+import { ActivityIndicator,
+  Alert,
+  Animated,
+  Linking,
+  Modal,
+  ScrollView,
+  Text,
+  View,
+  Vibration
+} from 'react-native';
+import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import BackIconButton from '../../components/BackIconButton';
 import { getCurrentUser, getRows, getUserProfile, subscribeToTable, updateRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
 const SERVICE_CONFIG = {
-  police: { label: 'Police Unit', icon: 'shield', color: '#5bc0be', bg: '#1c2541', gradient: ['#0b132b', '#3a506b'] },
-  ambulance: { label: 'Ambulance', icon: 'medkit', color: '#5bc0be', bg: '#1c2541', gradient: ['#1c2541', '#5bc0be'] },
-  fire: { label: 'Fire & Rescue', icon: 'flame', color: '#ffffff', bg: '#3a506b', gradient: ['#3a506b', '#0b132b'] },
+  community_protection_service: { label: 'Community Protection Services', icon: 'radio', color: '#5bc0be', bg: '#1c2541', gradient: ['#0b132b', '#3a506b'] },
+  police: { label: 'Community Protection Services', icon: 'radio', color: '#5bc0be', bg: '#1c2541', gradient: ['#0b132b', '#3a506b'] },
 };
 
 const STATUS_CONFIG = {
@@ -20,10 +31,27 @@ const STATUS_CONFIG = {
   resolved: { label: 'Resolved', color: '#5bc0be', bg: '#1c2541' },
 };
 
+const getDispatchCoordinates = (dispatch) => {
+  const latitude = Number(dispatch?.location?.latitude);
+  const longitude = Number(dispatch?.location?.longitude);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+  return { latitude, longitude };
+};
+
+const getDirectionsUrl = (dispatch) => {
+  const coordinates = getDispatchCoordinates(dispatch);
+  if (!coordinates) return dispatch?.location?.mapsUrl || null;
+
+  return `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}&travelmode=driving`;
+};
+
 export default function ResponderDashboardScreen() {
   const [dispatches, setDispatches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [responderServiceType, setResponderServiceType] = useState(null);
+  const [responderServiceType, setResponderServiceType] = useState('community_protection_service');
+  const [profile, setProfile] = useState(null);
   const [selectedDispatch, setSelectedDispatch] = useState(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
@@ -39,10 +67,10 @@ export default function ResponderDashboardScreen() {
 
 
   useEffect(() => {
-    if (!responderServiceType) return;
-    const unsubscribe = subscribeToDispatches(responderServiceType);
+    if (!responderServiceType || !profile) return;
+    const unsubscribe = subscribeToDispatches(responderServiceType, profile);
     return () => unsubscribe && unsubscribe();
-  }, [responderServiceType]);
+  }, [responderServiceType, profile]);
 
   useEffect(() => {
     const hasPending = dispatches.some(d => d.status === 'pending');
@@ -63,18 +91,22 @@ export default function ResponderDashboardScreen() {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
       const data = currentUser ? await getUserProfile(currentUser.id) : null;
-      setResponderServiceType(data?.serviceType || data?.responderType || 'police');
+      setProfile(data);
+      setResponderServiceType('community_protection_service');
     } catch (e) {
       console.error('Failed to load responder profile', e);
-      setResponderServiceType('police'); 
+      setResponderServiceType('community_protection_service'); 
     }
   };
 
-  const subscribeToDispatches = (serviceType) => {
+  const subscribeToDispatches = (serviceType, userProfile) => {
     const loadDispatches = async () => {
       try {
+        const filters = { serviceType };
+        if (userProfile?.ward_id) filters.ward_id = userProfile.ward_id;
+
         const data = await getRows('emergency_dispatches', {
-          eq: [{ column: 'serviceType', value: serviceType }],
+          filters,
           neq: [{ column: 'status', value: 'resolved' }],
           order: [
             { column: 'status', ascending: true },
@@ -121,8 +153,42 @@ export default function ResponderDashboardScreen() {
     }
   };
 
-  const serviceConfig = SERVICE_CONFIG[responderServiceType] || SERVICE_CONFIG.police;
+  const openDispatchDirections = (dispatch) => {
+    const directionsUrl = getDirectionsUrl(dispatch);
+
+    if (!directionsUrl) {
+      Alert.alert('Location Unavailable', 'This incident does not have a location attached.');
+      return;
+    }
+
+    const coordinates = getDispatchCoordinates(dispatch);
+    const locationLabel = coordinates
+      ? `${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)}`
+      : 'the incident location';
+
+    Alert.alert(
+      'Open Directions',
+      `Open directions to ${locationLabel}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Open Maps',
+          onPress: async () => {
+            try {
+              await Linking.openURL(directionsUrl);
+            } catch (error) {
+              console.error('Could not open directions:', error);
+              Alert.alert('Directions Error', 'Could not open maps on this device.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const serviceConfig = SERVICE_CONFIG[responderServiceType] || SERVICE_CONFIG.community_protection_service;
   const pendingCount = dispatches.filter(d => d.status === 'pending').length;
+  const wardLabel = profile?.wardName || profile?.ward_name || profile?.permissions?.manualWardNumber || profile?.ward_number || profile?.ward_id;
 
   const nextStatusAction = (currentStatus) => {
     switch (currentStatus) {
@@ -188,6 +254,28 @@ export default function ResponderDashboardScreen() {
           {dispatch.description}
         </Text>
 
+        {getDirectionsUrl(dispatch) && (
+          <TouchableOpacity
+            onPress={() => openDispatchDirections(dispatch)}
+            style={{
+              backgroundColor: colors.accentSoft,
+              borderRadius: 12,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              marginBottom: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              borderWidth: 1,
+              borderColor: colors.accent,
+            }}
+          >
+            <Ionicons name="navigate" size={16} color={colors.accent} />
+            <Text style={{ color: colors.accent, fontWeight: 'bold', fontSize: 13 }}>Get Directions</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={{ fontSize: 11, color: colors.textLight }}>
             {dispatch.dispatchedAt ? new Date(dispatch.dispatchedAt).toLocaleTimeString() : 'Just now'}
@@ -227,14 +315,13 @@ export default function ResponderDashboardScreen() {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.accent} />
-        <Text style={{ color: colors.textLight, marginTop: 12 }}>Connecting to dispatch...</Text>
+        <Text style={{ color: colors.textLight, marginTop: 12 }}>Connecting to CPS dispatch...</Text>
       </View>
     );
   }
 
   return (
     <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
-      <BackIconButton />
       <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
         <ScrollView showsVerticalScrollIndicator={false}>
 
@@ -247,12 +334,15 @@ export default function ResponderDashboardScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <View>
                 <Text style={{ fontSize: 13, color: '#fff', opacity: 0.8, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>
-                  Responder Dashboard
+                  CPS Responder Queue
                 </Text>
                 <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#fff' }}>{serviceConfig.label}</Text>
                 <Text style={{ fontSize: 14, color: '#fff', opacity: 0.9, marginTop: 6 }}>
+                  {wardLabel ? `Ward ${wardLabel}` : 'No ward assigned'}
+                </Text>
+                <Text style={{ fontSize: 14, color: '#fff', opacity: 0.9, marginTop: 6 }}>
                   {dispatches.length === 0
-                    ? 'No active dispatches'
+                    ? 'No active incidents'
                     : `${dispatches.length} active · ${pendingCount} new`}
                 </Text>
               </View>
@@ -276,13 +366,13 @@ export default function ResponderDashboardScreen() {
                 <Ionicons name="checkmark-circle-outline" size={64} color={colors.textLight} />
                 <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginTop: 16 }}>All Clear</Text>
                 <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 8, textAlign: 'center' }}>
-                  No active dispatches. You&apos;ll be alerted immediately when a new incident is approved.
+                  No active CPS incidents. You&apos;ll be alerted when your community leader dispatches a ward incident.
                 </Text>
               </View>
             ) : (
               <>
                 <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textLight, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>
-                  Active Dispatches
+                  Active CPS Dispatches
                 </Text>
                 {dispatches.map((dispatch) => (
                   <DispatchCard key={dispatch.id} dispatch={dispatch} />
@@ -343,6 +433,25 @@ export default function ResponderDashboardScreen() {
                   }
                 />
 
+                {getDirectionsUrl(selectedDispatch) && (
+                  <TouchableOpacity
+                    onPress={() => openDispatchDirections(selectedDispatch)}
+                    style={{
+                      backgroundColor: colors.accent,
+                      borderRadius: 14,
+                      padding: 14,
+                      alignItems: 'center',
+                      flexDirection: 'row',
+                      justifyContent: 'center',
+                      gap: 10,
+                      marginBottom: 18,
+                    }}
+                  >
+                    <Ionicons name="navigate" size={20} color="#fff" />
+                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: 'bold' }}>Open Directions</Text>
+                  </TouchableOpacity>
+                )}
+
                 {(() => {
                   const action = nextStatusAction(selectedDispatch.status);
                   const isUpdating = updatingId === selectedDispatch.id;
@@ -396,14 +505,5 @@ function DetailRow({ label, value }) {
       <Text style={{ fontSize: 15, color: colors.text, lineHeight: 22 }}>{value}</Text>
     </View>
   );
-}
-
-function nextStatusAction(currentStatus) {
-  switch (currentStatus) {
-    case 'pending':  return { label: 'Mark En Route', next: 'en_route',  color: '#5bc0be' };
-    case 'en_route': return { label: 'Mark On Scene',  next: 'on_scene',  color: '#3a506b' };
-    case 'on_scene': return { label: 'Mark Resolved',  next: 'resolved',  color: '#5bc0be' };
-    default: return null;
-  }
 }
 

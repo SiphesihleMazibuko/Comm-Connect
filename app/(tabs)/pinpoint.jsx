@@ -1,12 +1,25 @@
-import { Ionicons } from '@expo/vector-icons';
+import {
+  Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, Share, Text, TextInput, TouchableOpacity, Vibration, View } from 'react-native';
+import { useEffect,
+  useRef,
+  useState } from 'react';
+import { ActivityIndicator,
+  Alert,
+  Modal,
+  ScrollView,
+  Share,
+  Text,
+  TextInput,
+  Vibration,
+  View
+} from 'react-native';
+import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
 import QRCode from 'react-native-qrcode-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import BackIconButton from '../../components/BackIconButton';
+import ScreenHeader from '../../components/ScreenHeader';
 import { deleteRow, getCurrentUser, getRows, getUserProfile, insertRow, updateRow } from '../../config/supabase';
 import { notifyEmergencyContactsBySms, showLocalSosNotification } from '../../config/notifications';
 import colors from '../../Utils/colors';
@@ -19,9 +32,17 @@ const makeShareToken = () => {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 };
 
+const isValidRemoteId = (value) => (
+  value !== null
+  && value !== undefined
+  && `${value}`.trim() !== ''
+  && `${value}`.trim().toLowerCase() !== 'null'
+  && `${value}`.trim().toLowerCase() !== 'undefined'
+);
+
 const getEmergencyContacts = (profile) => (
   Array.isArray(profile?.permissions?.emergencyContacts)
-    ? profile.permissions.emergencyContacts
+    ? profile.permissions.emergencyContacts.filter((contact) => contact?.phone?.trim())
     : []
 );
 
@@ -34,7 +55,6 @@ export default function PinPointScreen() {
   const [addressLabel, setAddressLabel] = useState('');
   const [showQRModal, setShowQRModal] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
   const [sosStarting, setSosStarting] = useState(false);
   const [sosActive, setSosActive] = useState(false);
   const [sosAlertId, setSosAlertId] = useState(null);
@@ -55,10 +75,6 @@ export default function PinPointScreen() {
     const load = async () => {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
-      if (currentUser) {
-        const profile = await getUserProfile(currentUser.id);
-        setUserProfile(profile);
-      }
       await loadSavedAddresses(currentUser);
     };
 
@@ -249,7 +265,12 @@ export default function PinPointScreen() {
   };
 
   const updateSosLocation = async () => {
-    if (!sosAlertIdRef.current) return;
+    const alertId = sosAlertIdRef.current;
+
+    if (!isValidRemoteId(alertId)) {
+      clearSosLocationUpdates();
+      return;
+    }
 
     try {
       const currentLocation = await getHighAccuracyLocation();
@@ -258,7 +279,7 @@ export default function PinPointScreen() {
         currentLocation,
       ];
 
-      await updateRow('emergencyRequests', sosAlertIdRef.current, {
+      await updateRow('emergencyRequests', alertId, {
         location: {
           ...(sosLocationMetaRef.current || {}),
           currentLocation,
@@ -286,18 +307,20 @@ export default function PinPointScreen() {
       return;
     }
 
-    const emergencyContacts = getEmergencyContacts(userProfile);
-    if (emergencyContacts.length === 0) {
-      Alert.alert('Emergency Contacts Needed', 'Add emergency contacts in Settings before using SOS.');
-      return;
-    }
-
     setSosStarting(true);
 
     try {
+      const latestProfile = await getUserProfile(user.id);
+
+      const emergencyContacts = getEmergencyContacts(latestProfile);
+      if (emergencyContacts.length === 0) {
+        Alert.alert('Emergency Contacts Needed', 'Add emergency contacts in Settings before using SOS.');
+        return;
+      }
+
       const currentLocation = await getHighAccuracyLocation();
       const shareToken = makeShareToken();
-      const userName = `${userProfile?.firstName || ''} ${userProfile?.lastName || ''}`.trim() || user.email || 'PinPoint user';
+      const userName = `${latestProfile?.firstName || ''} ${latestProfile?.lastName || ''}`.trim() || user.email || 'PinPoint user';
       const createdAt = new Date().toISOString();
 
       sosLocationHistoryRef.current = [currentLocation];
@@ -305,7 +328,7 @@ export default function PinPointScreen() {
       const alert = await insertRow('emergencyRequests', {
         userId: user.id,
         userName,
-        userPhone: userProfile?.phoneNumber || '',
+        userPhone: latestProfile?.phoneNumber || '',
         emergencyType: 'sos',
         description: 'SOS live location alert',
         contactDetails: emergencyContacts.map((contact) => contact.phone).filter(Boolean).join(', '),
@@ -322,6 +345,11 @@ export default function PinPointScreen() {
       });
 
       const alertId = alert.id;
+
+      if (!isValidRemoteId(alertId)) {
+        throw new Error('SOS request was created without a valid remote id. Please try again when your connection is stable.');
+      }
+
       const trackingUrl = Linking.createURL(`/sos/${alertId}`, {
         queryParams: { token: shareToken },
       });
@@ -393,11 +421,19 @@ export default function PinPointScreen() {
   };
 
   const stopSos = async () => {
-    if (!sosAlertIdRef.current) return;
+    const alertId = sosAlertIdRef.current;
+
+    if (!isValidRemoteId(alertId)) {
+      clearSosLocationUpdates();
+      setSosActive(false);
+      setSosAlertId(null);
+      sosAlertIdRef.current = null;
+      return;
+    }
 
     try {
       clearSosLocationUpdates();
-      await updateRow('emergencyRequests', sosAlertIdRef.current, {
+      await updateRow('emergencyRequests', alertId, {
         status: 'cancelled',
         completedAt: new Date().toISOString(),
       });
@@ -413,15 +449,12 @@ export default function PinPointScreen() {
 
   return (
     <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
-      <BackIconButton />
       <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
-        <View style={{ backgroundColor: colors.primary, padding: 20, alignItems: 'center' }}>
-          <Ionicons name="location" size={50} color={colors.accent} />
-          <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#fff', marginTop: 10 }}>PinPoint Address</Text>
-          <Text style={{ fontSize: 14, color: '#fff', opacity: 0.8, marginTop: 5, textAlign: 'center' }}>
-            Generate your unique digital address
-          </Text>
-        </View>
+        <ScreenHeader
+          title="PinPoint Address"
+          subtitle="Generate your unique digital address"
+          icon="location"
+        />
 
         <View style={{ margin: 16, backgroundColor: colors.surface, borderRadius: 12, padding: 16, elevation: 2 }}>
           <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 12 }}>Generate New Address</Text>
@@ -572,7 +605,7 @@ export default function PinPointScreen() {
               {sosActive ? 'Stop SOS Live Tracking' : `Hold ${holdCountdown}s to Send SOS`}
             </Text>
           </TouchableOpacity>
-          {sosActive && (
+          {sosActive && isValidRemoteId(sosAlertId) && (
             <TouchableOpacity
               style={{ marginTop: 10, borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.error }}
               onPress={() => router.push(`/sos/${sosAlertId}`)}

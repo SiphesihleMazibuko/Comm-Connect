@@ -1,9 +1,17 @@
-import { Ionicons } from '@expo/vector-icons';
+import {
+  Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback,
+  useEffect,
+  useState } from 'react';
+import { ActivityIndicator,
+  ScrollView,
+  Text,
+  View
+} from 'react-native';
+import TouchableOpacity from '../components/FeedbackTouchableOpacity';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import BackIconButton from '../components/BackIconButton';
+import ScreenHeader from '../components/ScreenHeader';
 import { getCurrentUser, getRows, getUserProfile, subscribeToTable } from '../config/supabase';
 import colors from '../Utils/colors';
 
@@ -158,16 +166,13 @@ export default function HomeScreen() {
   return (
     
     <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
-    <BackIconButton />
     <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Header */}
-      <View style={{ backgroundColor: colors.primary, padding: 24, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 }}>
-        <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#fff' }}>Hello, {userName || 'Resident'}! </Text>
-        <Text style={{ fontSize: 14, color: '#fff', opacity: 0.8, marginTop: 8 }}>{wardTitle}</Text>
-        <Text style={{ fontSize: 12, color: '#fff', opacity: 0.7, marginTop: 4 }}>
-          {wardLocation || (wardDetails ? 'Your community is safer together' : 'Add your ward to see local alerts')}
-        </Text>
-      </View>
+      <ScreenHeader
+        title={`Hello, ${userName || 'Resident'}!`}
+        subtitle={wardTitle}
+        meta={wardLocation || (wardDetails ? 'Your community is safer together' : 'Add your ward to see local alerts')}
+        icon="home"
+      />
 
       <View style={{ marginHorizontal: 16, marginTop: 16, backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

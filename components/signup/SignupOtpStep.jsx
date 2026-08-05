@@ -1,4 +1,5 @@
-import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Text, TextInput, View } from 'react-native';
+import TouchableOpacity from '../FeedbackTouchableOpacity';
 import colors from '../../Utils/colors';
 
 export default function SignupOtpStep({

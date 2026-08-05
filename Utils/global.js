@@ -1,4 +1,3 @@
-// Utils/globalStyles.js
 import { StyleSheet } from 'react-native';
 
 export const dramaticGlobal = StyleSheet.create({

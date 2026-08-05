@@ -44,11 +44,12 @@ function GlassTabIcon({ name, color, size, focused }) {
 }
 
 const communityFeedIcon = (props) => <GlassTabIcon name="newspaper" {...props} />;
-const responderHomeIcon = (props) => <GlassTabIcon name="medical" {...props} />;
+const responderHomeIcon = (props) => <GlassTabIcon name="radio" {...props} />;
 const emergencyIcon = (props) => <GlassTabIcon name="alert-circle" {...props} />;
 const pinpointIcon = (props) => <GlassTabIcon name="location" {...props} />;
 const reportIcon = (props) => <GlassTabIcon name="megaphone" {...props} />;
 const approvalsIcon = (props) => <GlassTabIcon name="checkmark-done-circle" {...props} />;
+const dutyIcon = (props) => <GlassTabIcon name="people-circle" {...props} />;
 const settingsIcon = (props) => <GlassTabIcon name="settings" {...props} />;
 
 export default function TabLayout() {
@@ -112,7 +113,7 @@ export default function TabLayout() {
 
   const isResident = role === 'resident';
   const isLeader = role === 'community_leader';
-  const isResponder = role === 'emergency_responder';
+  const isCps = role === 'community_protection_service' || role === 'emergency_responder';
 
   return (
     <Tabs
@@ -164,7 +165,7 @@ export default function TabLayout() {
         name="communityfeed"
         options={{
           title: 'Home',
-          href: isResident || isLeader ? undefined : null,
+          href: isResident || isLeader || isCps ? undefined : null,
           tabBarIcon: communityFeedIcon,
         }}
       />
@@ -175,8 +176,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="emergencyResponderDashboard"
         options={{
-          title: 'Home',
-          href: isResponder ? undefined : null,
+          title: 'Responder',
+          href: isCps ? undefined : null,
           tabBarIcon: responderHomeIcon,
         }}
       />
@@ -188,8 +189,17 @@ export default function TabLayout() {
         name="emergencyrequest"
         options={{
           title: 'Emergencies',
-          href: isResponder ? undefined : null,
+          href: null,
           tabBarIcon: emergencyIcon,
+        }}
+      />
+
+      <Tabs.Screen
+        name="cpsmembers"
+        options={{
+          title: 'On Duty',
+          href: isCps ? undefined : null,
+          tabBarIcon: dutyIcon,
         }}
       />
 

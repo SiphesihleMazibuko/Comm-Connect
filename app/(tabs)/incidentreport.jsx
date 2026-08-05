@@ -1,7 +1,10 @@
-import { Ionicons } from '@expo/vector-icons';
+import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
+import {
+  Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect,
+  useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,11 +13,10 @@ import {
   Switch,
   Text,
   TextInput,
-  TouchableOpacity,
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import BackIconButton from '../../components/BackIconButton';
+import ScreenHeader from '../../components/ScreenHeader';
 import { uploadReportImages } from '../../config/mediaUpload';
 import { getCurrentUser, getRows, getUserProfile, insertRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
@@ -182,7 +184,7 @@ export default function IncidentReportScreen() {
     if (!selectedPinpoint) {
       Alert.alert(
         'No Location Selected',
-        'Please save a PinPoint address first so responders can find you.',
+        'Please save a PinPoint address first so Community Protection Services can find you.',
         [
           {
             text: 'Go to PinPoint',
@@ -320,18 +322,12 @@ export default function IncidentReportScreen() {
 
   return (
     <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
-      <BackIconButton />
       <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
-        {/* Header */}
-        <View style={{ backgroundColor: colors.primary, padding: 24, alignItems: 'center' }}>
-          <Ionicons name="megaphone" size={50} color={colors.accent} />
-          <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#fff', marginTop: 10 }}>
-            Report Incident
-          </Text>
-          <Text style={{ fontSize: 14, color: '#fff', opacity: 0.8 }}>
-            Help keep your community safe
-          </Text>
-        </View>
+        <ScreenHeader
+          title="Report Incident"
+          subtitle="Help keep your community safe"
+          icon="megaphone"
+        />
 
         <View style={{ padding: 16 }}>
           {/* Report Type */}
@@ -620,7 +616,7 @@ export default function IncidentReportScreen() {
 
               <Text style={{ fontSize: 13, color: colors.textLight, marginBottom: 12 }}>
                 You need to save at least one address in PinPoint before submitting a report.
-                This helps responders find your exact location.
+                This helps Community Protection Services find your exact location.
               </Text>
 
               <TouchableOpacity

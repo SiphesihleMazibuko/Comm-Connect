@@ -1,5 +1,9 @@
-import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import TouchableOpacity from '../components/FeedbackTouchableOpacity';
+import {
+  router } from 'expo-router';
+import { useEffect,
+  useRef,
+  useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,7 +13,6 @@ import {
   ScrollView,
   Text,
   TextInput,
-  TouchableOpacity,
   View
 } from 'react-native';
 import { getFriendlySupabaseError, getSupabaseClient, getUserProfile } from '../config/supabase';
@@ -158,8 +161,8 @@ export default function LoginScreen() {
         router.replace('/(tabs)/communityfeed');
       } else if (userData.role === 'community_leader') {
         router.replace('/(tabs)/communityfeed');
-      } else if (userData.role === 'emergency_responder') {
-        router.replace('/(tabs)/emergencyrequest');
+      } else if (userData.role === 'community_protection_service' || userData.role === 'emergency_responder') {
+        router.replace('/(tabs)/emergencyResponderDashboard');
       } else {
         Alert.alert('Error', 'Invalid user role');
       }

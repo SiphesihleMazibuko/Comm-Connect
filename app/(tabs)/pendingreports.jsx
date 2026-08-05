@@ -1,36 +1,31 @@
-import { Ionicons } from '@expo/vector-icons';
+import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
+import {
+  Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Image, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect,
+  useRef,
+  useState } from 'react';
+import { ActivityIndicator,
+  Animated,
+  Image,
+  Modal,
+  ScrollView,
+  Text,
+  View
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import BackIconButton from '../../components/BackIconButton';
+import ScreenHeader from '../../components/ScreenHeader';
 import { getCurrentUser, getRows, getUserProfile, insertRow, updateRow } from '../../config/supabase';
 import colors from '../../Utils/colors';
 
 const EMERGENCY_SERVICES = [
   {
-    id: 'police',
-    label: 'Police',
-    icon: 'shield',
+    id: 'community_protection_service',
+    label: 'Community Protection Services',
+    icon: 'radio',
     color: '#5bc0be',
     bg: '#1c2541',
-    serviceType: 'police',
-  },
-  {
-    id: 'ambulance',
-    label: 'Ambulance',
-    icon: 'medkit',
-    color: '#5bc0be',
-    bg: '#1c2541',
-    serviceType: 'ambulance',
-  },
-  {
-    id: 'fire',
-    label: 'Fire Truck',
-    icon: 'flame',
-    color: '#ffffff',
-    bg: '#3a506b',
-    serviceType: 'fire',
+    serviceType: 'community_protection_service',
   },
 ];
 
@@ -384,35 +379,16 @@ export default function PendingReportsScreen() {
   //Render
   return (
     <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
-      <BackIconButton />
       <Animated.ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
 
-        {/* HEADER */}
-        <LinearGradient
-          colors={[colors.gradient1 || '#1c2541', colors.gradient2 || '#5bc0be']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ padding: 28, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }}
-        >
-          <Animated.View style={{ opacity: fadeAnim }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View>
-                <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#fff' }}>Pending Reports</Text>
-                <Text style={{ fontSize: 14, color: '#fff', opacity: 0.9, marginTop: 8 }}>
-                  {reports.length} reports awaiting review
-                </Text>
-                {userProfile?.ward_number && (
-                  <Text style={{ fontSize: 12, color: '#fff', opacity: 0.7, marginTop: 4 }}>
-                    Ward {userProfile.ward_number}
-                  </Text>
-                )}
-              </View>
-              <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="checkmark-done-circle" size={32} color="#fff" />
-              </View>
-            </View>
-          </Animated.View>
-        </LinearGradient>
+        <Animated.View style={{ opacity: fadeAnim }}>
+          <ScreenHeader
+            title="Pending Reports"
+            subtitle={`${reports.length} reports awaiting review`}
+            meta={userProfile?.ward_number ? `Ward ${userProfile.ward_number}` : undefined}
+            icon="checkmark-done-circle"
+          />
+        </Animated.View>
 
         {userProfile?.role === 'community_leader' && (
           <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
@@ -605,7 +581,7 @@ export default function PendingReportsScreen() {
               <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text }}>Dispatch Services</Text>
             </View>
             <Text style={{ fontSize: 13, color: colors.textLight, marginBottom: 24, marginLeft: 46 }}>
-              Select which emergency services to alert. Responders will be notified immediately.
+              Dispatch this verified incident to Community Protection Services for your ward.
             </Text>
 
             <View style={{ gap: 12, marginBottom: 28 }}>

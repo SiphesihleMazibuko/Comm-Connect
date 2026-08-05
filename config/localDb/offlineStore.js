@@ -10,6 +10,7 @@ const QUEUED_TABLES = new Set([
   'reports',
   'emergency_dispatches',
   'emergencyRequests',
+  'cps_duty_sessions',
   'users',
 ]);
 

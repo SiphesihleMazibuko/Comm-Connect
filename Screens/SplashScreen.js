@@ -1,7 +1,13 @@
-import { Image } from 'expo-image';
+import {
+  Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { StatusBar, Text, TouchableOpacity, View } from 'react-native';
+import { StatusBar,
+  Text,
+  View
+} from 'react-native';
+import TouchableOpacity from '../components/FeedbackTouchableOpacity';
 import Onboarding from 'react-native-onboarding-swiper';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../Utils/colors';
 
 const globalGif = require('../assets/global-connection.gif');
@@ -23,7 +29,7 @@ const GifFrame = ({ source }) => (
   </View>
 );
 
-const ControlButton = ({ children, onPress, primary = false }) => (
+const ControlButton = ({ children, onPress, primary = false, bottomInset = 0 }) => (
   <TouchableOpacity
     onPress={onPress}
     activeOpacity={0.85}
@@ -37,6 +43,8 @@ const ControlButton = ({ children, onPress, primary = false }) => (
       backgroundColor: primary ? colors.accent : 'rgba(255,255,255,0)',
       borderWidth: primary ? 0 : 1,
       borderColor: 'rgba(255,255,255,0.18)',
+      marginHorizontal: 12,
+      marginBottom: Math.max(8, Math.floor(bottomInset / 2)),
     }}
   >
     <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>{children}</Text>
@@ -55,22 +63,25 @@ const Dot = ({ selected }) => (
 
 export default function SplashScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const goToLogin = () => router.replace('/login');
+  const bottomPadding = Math.max(insets.bottom, 24);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar barStyle="light-content" />
       <Onboarding
         onDone={goToLogin}
         onSkip={goToLogin}
         bottomBarColor={colors.background}
         bottomBarHighlight={false}
+        bottomBarHeight={76 + bottomPadding}
         containerStyles={{ paddingHorizontal: 22 }}
         titleStyles={{ color: '#fff', fontSize: 28, fontWeight: '900', textAlign: 'center' }}
         subTitleStyles={{ color: colors.textLight, fontSize: 15, lineHeight: 22, textAlign: 'center', paddingHorizontal: 12 }}
-        SkipButtonComponent={(props) => <ControlButton {...props}>Skip</ControlButton>}
-        NextButtonComponent={(props) => <ControlButton {...props} primary>Next</ControlButton>}
-        DoneButtonComponent={(props) => <ControlButton {...props} primary>Start</ControlButton>}
+        SkipButtonComponent={(props) => <ControlButton {...props} bottomInset={bottomPadding}>Skip</ControlButton>}
+        NextButtonComponent={(props) => <ControlButton {...props} primary bottomInset={bottomPadding}>Next</ControlButton>}
+        DoneButtonComponent={(props) => <ControlButton {...props} primary bottomInset={bottomPadding}>Start</ControlButton>}
         DotComponent={Dot}
         pages={[
           {
@@ -93,6 +104,6 @@ export default function SplashScreen() {
           },
         ]}
       />
-    </View>
+    </SafeAreaView>
   );
 }

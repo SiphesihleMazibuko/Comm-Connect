@@ -1,15 +1,18 @@
-import { router } from 'expo-router';
+import {
+  router } from 'expo-router';
 import * as Location from 'expo-location';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect,
+  useRef,
+  useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   Text,
-  TouchableOpacity,
-  View,
+  View
 } from 'react-native';
+import TouchableOpacity from '../components/FeedbackTouchableOpacity';
 import SignupDetailsStep from '../components/signup/SignupDetailsStep';
 import SignupHeader from '../components/signup/SignupHeader';
 import SignupOtpStep from '../components/signup/SignupOtpStep';
@@ -60,7 +63,7 @@ export default function SignupScreen() {
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [locationLookupStatus, setLocationLookupStatus] = useState('');
   const [organizationName, setOrganizationName] = useState('');
-  const [responderType, setResponderType] = useState('');
+  const [cpsWardName, setCpsWardName] = useState('');
 
   //Location Hierarchy States
   const [provinces, setProvinces] = useState([]);
@@ -400,11 +403,18 @@ export default function SignupScreen() {
       const { latitude, longitude } = currentLocation.coords;
       const digitalAddress = createPinPointAddress(latitude, longitude);
       const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
-      const osmLocation = await reverseGeocodeWithOpenStreetMap(latitude, longitude);
 
       setPinpointLocation({ latitude, longitude, digitalAddress, mapsUrl });
-      setLocation(buildOpenStreetMapAddressLabel(osmLocation, digitalAddress));
-      await applyLocationHierarchyFromGps(osmLocation);
+      setLocation(digitalAddress);
+
+      try {
+        const osmLocation = await reverseGeocodeWithOpenStreetMap(latitude, longitude);
+        setLocation(buildOpenStreetMapAddressLabel(osmLocation, digitalAddress));
+        await applyLocationHierarchyFromGps(osmLocation);
+      } catch (lookupError) {
+        console.warn('Signup location details unavailable:', lookupError);
+        setLocationLookupStatus('Location saved. Select or enter your ward number if you know it.');
+      }
     } catch (error) {
       console.error('Error detecting signup location:', error);
       Alert.alert('Location Error', 'We could not detect your location. You can continue and add it later.');
@@ -432,9 +442,9 @@ export default function SignupScreen() {
       description: 'Manage community alerts and review reports'
     },
     {
-      id: 'emergency_responder',
-      title: 'Emergency Responder',
-      description: 'Respond to emergency requests and incidents'
+      id: 'community_protection_service',
+      title: 'Community Protection Services',
+      description: 'Receive ward incidents and coordinate on-duty protection members'
     }
   ];
 
@@ -457,8 +467,8 @@ export default function SignupScreen() {
       return;
     }
 
-    if (selectedRole === 'emergency_responder' && !responderType) {
-      Alert.alert('Error', 'Please enter your responder type');
+    if (selectedRole === 'community_protection_service' && !cpsWardName.trim()) {
+      Alert.alert('Error', 'Please enter the name of your ward');
       return;
     }
 
@@ -541,7 +551,9 @@ export default function SignupScreen() {
         location: location || pinpointLocation?.digitalAddress || null,
         role: selectedRole,
         organizationName: selectedRole === 'community_leader' ? organizationName : null,
-        responderType: selectedRole === 'emergency_responder' ? responderType : null,
+        responderType: selectedRole === 'community_protection_service' ? 'community_protection_service' : null,
+        serviceType: selectedRole === 'community_protection_service' ? 'community_protection_service' : null,
+        wardName: selectedRole === 'community_protection_service' ? cpsWardName.trim() : null,
         // --- Location IDs --------------------------------------------------
         province_id: selectedProvince?.id || null,
         city_id: selectedCity?.id || null,
@@ -561,7 +573,8 @@ export default function SignupScreen() {
           canReportIncident: true,
           canRequestEmergency: true,
           canReviewReports: selectedRole === 'community_leader',
-          canRespondToEmergency: selectedRole === 'emergency_responder',
+          canRespondToEmergency: selectedRole === 'community_protection_service',
+          canClockInForDuty: selectedRole === 'community_protection_service',
           canSendCommunityAlerts: selectedRole === 'community_leader'
         },
         createdAt: new Date().toISOString(),
@@ -672,8 +685,8 @@ export default function SignupScreen() {
             setLocation={setLocation}
             organizationName={organizationName}
             setOrganizationName={setOrganizationName}
-            responderType={responderType}
-            setResponderType={setResponderType}
+            cpsWardName={cpsWardName}
+            setCpsWardName={setCpsWardName}
             loading={loading}
             onSendOtp={handleSendOTP}
             locationSelectorProps={locationSelectorProps}
