@@ -1,28 +1,16 @@
-import {
-  Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
-import { useEffect,
-  useRef,
-  useState } from 'react';
-import { ActivityIndicator,
-  Alert,
-  Modal,
-  ScrollView,
-  Share,
-  Text,
-  TextInput,
-  Vibration,
-  View
-} from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, ScrollView, Share, Text, TextInput, Vibration, View } from 'react-native';
 import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
 import QRCode from 'react-native-qrcode-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ScreenHeader from '../../components/ScreenHeader';
 import { deleteRow, getCurrentUser, getRows, getUserProfile, insertRow, updateRow } from '../../config/supabase';
 import { notifyEmergencyContactsBySms, showLocalSosNotification } from '../../config/notifications';
-import colors from '../../Utils/colors';
+import { useTheme } from '../context/ThemeContext';
 
 const HOLD_SECONDS = 5;
 const SOS_LOCATION_INTERVAL_MS = 10000;
@@ -33,11 +21,11 @@ const makeShareToken = () => {
 };
 
 const isValidRemoteId = (value) => (
-  value !== null
-  && value !== undefined
-  && `${value}`.trim() !== ''
-  && `${value}`.trim().toLowerCase() !== 'null'
-  && `${value}`.trim().toLowerCase() !== 'undefined'
+  value !== null &&
+  value !== undefined &&
+  `${value}`.trim() !== '' &&
+  `${value}`.trim().toLowerCase() !== 'null' &&
+  `${value}`.trim().toLowerCase() !== 'undefined'
 );
 
 const getEmergencyContacts = (profile) => (
@@ -47,6 +35,8 @@ const getEmergencyContacts = (profile) => (
 );
 
 export default function PinPointScreen() {
+  const { colors, isDark } = useTheme();
+
   const [location, setLocation] = useState(null);
   const [digitalAddress, setDigitalAddress] = useState('');
   const [savedAddresses, setSavedAddresses] = useState([]);
@@ -55,6 +45,7 @@ export default function PinPointScreen() {
   const [addressLabel, setAddressLabel] = useState('');
   const [showQRModal, setShowQRModal] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState(null);
+
   const [sosStarting, setSosStarting] = useState(false);
   const [sosActive, setSosActive] = useState(false);
   const [sosAlertId, setSosAlertId] = useState(null);
@@ -62,6 +53,7 @@ export default function PinPointScreen() {
 
   const router = useRouter();
   const [user, setUser] = useState(null);
+
   const holdTimerRef = useRef(null);
   const countdownRef = useRef(null);
   const holdVibrationRef = useRef(null);
@@ -73,9 +65,13 @@ export default function PinPointScreen() {
 
   useEffect(() => {
     const load = async () => {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-      await loadSavedAddresses(currentUser);
+      try {
+        const currentUser = await getCurrentUser();
+        setUser(currentUser);
+        if (currentUser) await loadSavedAddresses(currentUser);
+      } catch (error) {
+        console.error('PinPoint initial load error:', error);
+      }
     };
 
     load();
@@ -89,44 +85,33 @@ export default function PinPointScreen() {
   const getCurrentLocation = async () => {
     const requestId = locationRequestRef.current + 1;
     locationRequestRef.current = requestId;
+
     setLoading(true);
 
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Allow location access to generate your PinPoint address');
+        Alert.alert('Permission Denied', 'Allow location access to generate your PinPoint address.');
         return;
       }
 
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Highest,
-      });
-
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
       const { latitude, longitude } = loc.coords;
 
       const latHash = Math.abs(latitude).toFixed(4).replace('.', '');
       const lngHash = Math.abs(longitude).toFixed(4).replace('.', '');
       const address = `PIN-${latHash}-${lngHash}`;
-
       const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
 
       if (locationRequestRef.current !== requestId) return;
 
-      setLocation({
-        latitude,
-        longitude,
-        mapsUrl,
-      });
-
+      setLocation({ latitude, longitude, mapsUrl });
       setDigitalAddress(address);
     } catch (error) {
-      Alert.alert('Error', 'Failed to get location');
       console.error('Location error:', error);
+      Alert.alert('Error', 'Failed to get your current location.');
     } finally {
-      if (locationRequestRef.current === requestId) {
-        setLoading(false);
-      }
+      if (locationRequestRef.current === requestId) setLoading(false);
     }
   };
 
@@ -140,12 +125,17 @@ export default function PinPointScreen() {
 
   const saveAddress = async () => {
     if (!location || !digitalAddress) {
-      Alert.alert('Error', 'Generate a location first');
+      Alert.alert('Error', 'Generate a location first.');
       return;
     }
 
     if (!addressLabel.trim()) {
-      Alert.alert('Error', 'Please enter a label (e.g., Home, Work)');
+      Alert.alert('Error', 'Please enter a label (e.g., Home, Work).');
+      return;
+    }
+
+    if (!user?.id) {
+      Alert.alert('Login Required', 'Please log in before saving an address.');
       return;
     }
 
@@ -154,7 +144,7 @@ export default function PinPointScreen() {
     try {
       await insertRow('pinpoints', {
         userId: user.id,
-        label: addressLabel,
+        label: addressLabel.trim(),
         digitalAddress,
         latitude: location.latitude,
         longitude: location.longitude,
@@ -163,28 +153,25 @@ export default function PinPointScreen() {
         createdAt: new Date().toISOString(),
       });
 
-      Alert.alert('Success', 'Address saved successfully');
+      Alert.alert('Success', 'Address saved successfully.');
       setAddressLabel('');
       setLocation(null);
       setDigitalAddress('');
-      loadSavedAddresses(user);
+      await loadSavedAddresses(user);
     } catch (error) {
-      Alert.alert('Error', 'Failed to save address');
       console.error('Save address error:', error);
+      Alert.alert('Error', 'Failed to save address.');
     } finally {
       setSaving(false);
     }
   };
 
   const loadSavedAddresses = async (currentUser = user) => {
-    if (!currentUser) return;
+    if (!currentUser?.id) return;
 
     try {
-      const addresses = await getRows('pinpoints', {
-        eq: [{ column: 'userId', value: currentUser.id }],
-      });
-
-      setSavedAddresses(addresses);
+      const addresses = await getRows('pinpoints', { eq: [{ column: 'userId', value: currentUser.id }] });
+      setSavedAddresses(Array.isArray(addresses) ? addresses : []);
     } catch (error) {
       console.error('Error loading addresses:', error);
     }
@@ -192,12 +179,13 @@ export default function PinPointScreen() {
 
   const shareAddress = async (address) => {
     try {
+      const mapsUrl = address.mapsUrl || `https://www.google.com/maps?q=${address.latitude},${address.longitude}`;
       await Share.share({
-        message: `My PinPoint Address: ${address.digitalAddress}\nView Location: ${address.mapsUrl || `https://www.google.com/maps?q=${address.latitude},${address.longitude}`}\n\nSent via Comm-Connect`,
+        message: `My PinPoint Address: ${address.digitalAddress}\nView Location: ${mapsUrl}\n\nSent via Comm-Connect`,
       });
     } catch (error) {
-      Alert.alert('Error', 'Failed to share address');
       console.error('Share address error:', error);
+      Alert.alert('Error', 'Failed to share address.');
     }
   };
 
@@ -213,11 +201,11 @@ export default function PinPointScreen() {
           onPress: async () => {
             try {
               await deleteRow('pinpoints', addressId);
-              loadSavedAddresses(user);
-              Alert.alert('Success', 'Address deleted');
+              await loadSavedAddresses(user);
+              Alert.alert('Success', 'Address deleted.');
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete address');
               console.error('Delete address error:', error);
+              Alert.alert('Error', 'Failed to delete address.');
             }
           },
         },
@@ -227,16 +215,11 @@ export default function PinPointScreen() {
 
   const getHighAccuracyLocation = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') throw new Error('Location permission is required for SOS tracking.');
 
-    if (status !== 'granted') {
-      throw new Error('Location permission is required for SOS tracking');
-    }
-
-    const currentLocation = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Highest,
-    });
-
+    const currentLocation = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
     const { latitude, longitude, accuracy, heading, speed } = currentLocation.coords;
+
     return {
       latitude,
       longitude,
@@ -252,9 +235,11 @@ export default function PinPointScreen() {
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
     if (holdVibrationRef.current) clearInterval(holdVibrationRef.current);
+
     holdTimerRef.current = null;
     countdownRef.current = null;
     holdVibrationRef.current = null;
+
     Vibration.cancel();
     setHoldCountdown(HOLD_SECONDS);
   };
@@ -266,7 +251,6 @@ export default function PinPointScreen() {
 
   const updateSosLocation = async () => {
     const alertId = sosAlertIdRef.current;
-
     if (!isValidRemoteId(alertId)) {
       clearSosLocationUpdates();
       return;
@@ -274,10 +258,7 @@ export default function PinPointScreen() {
 
     try {
       const currentLocation = await getHighAccuracyLocation();
-      sosLocationHistoryRef.current = [
-        ...sosLocationHistoryRef.current.slice(-11),
-        currentLocation,
-      ];
+      sosLocationHistoryRef.current = [...sosLocationHistoryRef.current.slice(-11), currentLocation];
 
       await updateRow('emergencyRequests', alertId, {
         location: {
@@ -302,7 +283,7 @@ export default function PinPointScreen() {
   const activateSos = async () => {
     if (sosStarting || sosActive) return;
 
-    if (!user) {
+    if (!user?.id) {
       Alert.alert('Login Required', 'Please log in before triggering SOS.');
       return;
     }
@@ -311,8 +292,8 @@ export default function PinPointScreen() {
 
     try {
       const latestProfile = await getUserProfile(user.id);
-
       const emergencyContacts = getEmergencyContacts(latestProfile);
+
       if (emergencyContacts.length === 0) {
         Alert.alert('Emergency Contacts Needed', 'Add emergency contacts in Settings before using SOS.');
         return;
@@ -320,6 +301,7 @@ export default function PinPointScreen() {
 
       const currentLocation = await getHighAccuracyLocation();
       const shareToken = makeShareToken();
+
       const userName = `${latestProfile?.firstName || ''} ${latestProfile?.lastName || ''}`.trim() || user.email || 'PinPoint user';
       const createdAt = new Date().toISOString();
 
@@ -344,22 +326,15 @@ export default function PinPointScreen() {
         createdAt,
       });
 
-      const alertId = alert.id;
+      const alertId = alert?.id;
 
       if (!isValidRemoteId(alertId)) {
-        throw new Error('SOS request was created without a valid remote id. Please try again when your connection is stable.');
+        throw new Error('SOS request was created without a valid remote ID. Please try again when your connection is stable.');
       }
 
-      const trackingUrl = Linking.createURL(`/sos/${alertId}`, {
-        queryParams: { token: shareToken },
-      });
+      const trackingUrl = Linking.createURL(`/sos/${alertId}`, { queryParams: { token: shareToken } });
 
-      sosLocationMetaRef.current = {
-        type: 'sos',
-        emergencyContacts,
-        shareToken,
-        trackingUrl,
-      };
+      sosLocationMetaRef.current = { type: 'sos', emergencyContacts, shareToken, trackingUrl };
 
       await updateRow('emergencyRequests', alertId, {
         location: {
@@ -369,16 +344,19 @@ export default function PinPointScreen() {
           lastLocationAt: currentLocation.recordedAt,
         },
       });
+
       const smsOpened = await notifyEmergencyContactsBySms({
         contacts: emergencyContacts,
         alert: { ...alert, id: alertId, userName },
         trackingUrl,
       });
+
       await showLocalSosNotification(alertId);
 
       sosAlertIdRef.current = alertId;
       setSosAlertId(alertId);
       setSosActive(true);
+
       startSosLocationUpdates();
 
       Alert.alert(
@@ -389,7 +367,7 @@ export default function PinPointScreen() {
       );
     } catch (error) {
       console.error('[SOS] Failed to activate:', error);
-      Alert.alert('SOS Failed', error.message || 'Failed to activate SOS. Please try again.');
+      Alert.alert('SOS Failed', error?.message || 'Failed to activate SOS. Please try again.');
     } finally {
       setSosStarting(false);
       clearSosHold();
@@ -401,13 +379,9 @@ export default function PinPointScreen() {
 
     setHoldCountdown(HOLD_SECONDS);
     Vibration.vibrate(120);
-    holdVibrationRef.current = setInterval(() => {
-      Vibration.vibrate(120);
-    }, 1000);
 
-    countdownRef.current = setInterval(() => {
-      setHoldCountdown((seconds) => Math.max(1, seconds - 1));
-    }, 1000);
+    holdVibrationRef.current = setInterval(() => Vibration.vibrate(120), 1000);
+    countdownRef.current = setInterval(() => setHoldCountdown((seconds) => Math.max(1, seconds - 1)), 1000);
 
     holdTimerRef.current = setTimeout(() => {
       clearSosHold();
@@ -433,13 +407,14 @@ export default function PinPointScreen() {
 
     try {
       clearSosLocationUpdates();
-      await updateRow('emergencyRequests', alertId, {
-        status: 'cancelled',
-        completedAt: new Date().toISOString(),
-      });
+      await updateRow('emergencyRequests', alertId, { status: 'cancelled', completedAt: new Date().toISOString() });
+
       setSosActive(false);
       setSosAlertId(null);
       sosAlertIdRef.current = null;
+      sosLocationHistoryRef.current = [];
+      sosLocationMetaRef.current = {};
+
       Alert.alert('SOS Stopped', 'Live location sharing has been stopped.');
     } catch (error) {
       console.error('[SOS] Failed to stop:', error);
@@ -449,95 +424,128 @@ export default function PinPointScreen() {
 
   return (
     <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
-        <ScreenHeader
-          title="PinPoint Address"
-          subtitle="Generate your unique digital address"
-          icon="location"
-        />
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.background }}
+        contentContainerStyle={{ paddingBottom: 24 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <ScreenHeader title="PinPoint Address" subtitle="Generate your unique digital address" icon="location" />
 
-        <View style={{ margin: 16, backgroundColor: colors.surface, borderRadius: 12, padding: 16, elevation: 2 }}>
-          <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 12 }}>Generate New Address</Text>
+        <View style={{
+          marginHorizontal: 16,
+          marginTop: 16,
+          backgroundColor: colors.surface,
+          borderRadius: 20,
+          padding: 18,
+          borderWidth: 1,
+          borderColor: colors.border,
+          elevation: isDark ? 0 : 3,
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+            <View style={{
+              width: 44,
+              height: 44,
+              borderRadius: 14,
+              backgroundColor: colors.greenMint,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 12,
+            }}>
+              <Ionicons name="location" size={22} color={colors.greenTeal} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>Generate New Address</Text>
+              <Text style={{ fontSize: 13, color: colors.textLight, marginTop: 3 }}>Use your current location</Text>
+            </View>
+          </View>
 
           <TouchableOpacity
-            style={{ backgroundColor: colors.accent, borderRadius: 12, padding: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10 }}
+            style={{ backgroundColor: colors.primary, borderRadius: 14, paddingVertical: 15, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10 }}
             onPress={getCurrentLocation}
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.textInverse} />
             ) : (
               <>
-                <Ionicons name="locate" size={20} color="#fff" />
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Get Current Location</Text>
+                <Ionicons name="locate" size={21} color={colors.textInverse} />
+                <Text style={{ color: colors.textInverse, fontWeight: '700', fontSize: 15 }}>Get Current Location</Text>
               </>
             )}
           </TouchableOpacity>
 
           {loading && (
             <TouchableOpacity
-              style={{ borderColor: colors.border, borderRadius: 12, borderWidth: 1, padding: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 12 }}
+              style={{ borderColor: colors.border, borderRadius: 14, borderWidth: 1, paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 10, backgroundColor: colors.greenSoft }}
               onPress={cancelCurrentLocation}
               disabled={saving}
             >
-              <Ionicons name="close-circle-outline" size={20} color={colors.text} />
-              <Text style={{ color: colors.text, fontWeight: 'bold' }}>Cancel</Text>
+              <Ionicons name="close-circle-outline" size={20} color={colors.textLight} />
+              <Text style={{ color: colors.text, fontWeight: '700' }}>Cancel</Text>
             </TouchableOpacity>
           )}
 
           {digitalAddress !== '' && (
-            <View style={{ marginTop: 16 }}>
-              <Text style={{ fontSize: 14, color: colors.textLight, marginBottom: 5 }}>Your Digital Address:</Text>
-
-              <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 8 }}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.accent, textAlign: 'center' }}>
+            <View style={{ marginTop: 18, backgroundColor: colors.greenSoft, borderRadius: 16, padding: 15, borderWidth: 1, borderColor: colors.border }}>
+              <Text style={{ fontSize: 13, color: colors.textLight, marginBottom: 7 }}>Your Digital Address</Text>
+              <View style={{ backgroundColor: colors.surface, paddingVertical: 15, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.greenMint }}>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.greenDeep, textAlign: 'center', letterSpacing: 0.5 }}>
                   {digitalAddress}
                 </Text>
               </View>
 
               <TextInput
-                style={{ backgroundColor: colors.surfaceRaised, borderRadius: 8, padding: 12, marginTop: 12, borderWidth: 1, borderColor: colors.border, color: colors.text }}
+                style={{ backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, marginTop: 12, borderWidth: 1, borderColor: colors.border, color: colors.text, fontSize: 14 }}
                 placeholder="Label (e.g., Home, Work, Shop)"
                 placeholderTextColor={colors.textLight}
-                selectionColor={colors.accent}
+                selectionColor={colors.primary}
                 value={addressLabel}
                 onChangeText={setAddressLabel}
               />
 
-              <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
                 <TouchableOpacity
-                  style={{ flex: 1, borderColor: colors.border, borderRadius: 12, borderWidth: 1, padding: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                  style={{ flex: 1, borderColor: colors.border, borderRadius: 12, borderWidth: 1, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 7, backgroundColor: colors.surface }}
                   onPress={cancelCurrentLocation}
                   disabled={saving}
                 >
-                  <Ionicons name="close-circle-outline" size={20} color={colors.text} />
-                  <Text style={{ color: colors.text, fontWeight: 'bold' }}>Cancel</Text>
+                  <Ionicons name="close-circle-outline" size={18} color={colors.textLight} />
+                  <Text style={{ color: colors.text, fontWeight: '700' }}>Cancel</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 12, padding: 14, alignItems: 'center' }}
+                  style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' }}
                   onPress={saveAddress}
                   disabled={saving}
                 >
-                  {saving ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Save Address</Text>
-                  )}
+                  {saving ? <ActivityIndicator color={colors.textInverse} /> : <Text style={{ color: colors.textInverse, fontWeight: '700' }}>Save Address</Text>}
                 </TouchableOpacity>
               </View>
             </View>
           )}
         </View>
 
-        <View style={{ margin: 16 }}>
-          <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 12 }}>My Saved Addresses</Text>
+        <View style={{ marginHorizontal: 16, marginTop: 24 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: colors.greenSage, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+              <Ionicons name="bookmark" size={19} color={colors.greenForest} />
+            </View>
+            <View>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>My Saved Addresses</Text>
+              <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 2 }}>Your saved locations</Text>
+            </View>
+          </View>
 
           {savedAddresses.length === 0 ? (
-            <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 40, alignItems: 'center' }}>
-              <Ionicons name="bookmark-outline" size={50} color={colors.textLight} />
-              <Text style={{ color: colors.textLight, marginTop: 10, textAlign: 'center' }}>
-                No saved addresses yet. Generate and save your first address above.
+            <View style={{ backgroundColor: colors.surface, borderRadius: 18, padding: 35, alignItems: 'center', borderWidth: 1, borderColor: colors.border }}>
+              <View style={{ width: 65, height: 65, borderRadius: 22, backgroundColor: colors.greenMint, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="bookmark-outline" size={32} color={colors.greenForest} />
+              </View>
+              <Text style={{ color: colors.text, marginTop: 14, fontSize: 15, fontWeight: '700', textAlign: 'center' }}>
+                No saved addresses yet
+              </Text>
+              <Text style={{ color: colors.textLight, marginTop: 6, textAlign: 'center', lineHeight: 19 }}>
+                Generate and save your first PinPoint address above.
               </Text>
             </View>
           ) : (
@@ -545,13 +553,18 @@ export default function PinPointScreen() {
               const qrValue = addr.qrPayload || addr.mapsUrl || `https://www.google.com/maps?q=${addr.latitude},${addr.longitude}`;
 
               return (
-                <View key={addr.id} style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 16, marginBottom: 12, elevation: 1 }}>
+                <View key={addr.id} style={{ backgroundColor: colors.surface, borderRadius: 18, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.border, elevation: isDark ? 0 : 2 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View>
-                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>{addr.label}</Text>
-                      <Text style={{ fontSize: 12, color: colors.accent, marginTop: 4 }}>{addr.digitalAddress}</Text>
-                      <Text style={{ fontSize: 10, color: colors.textLight, marginTop: 4 }}>
-                        {addr.latitude.toFixed(6)}, {addr.longitude.toFixed(6)}
+                    <View style={{ flex: 1, paddingRight: 12 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Ionicons name="location" size={17} color={colors.greenTeal} />
+                        <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text, marginLeft: 6 }}>{addr.label}</Text>
+                      </View>
+                      <View style={{ backgroundColor: colors.greenSage, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 9, marginTop: 9 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.greenDeep }}>{addr.digitalAddress}</Text>
+                      </View>
+                      <Text style={{ fontSize: 10, color: colors.textLight, marginTop: 7 }}>
+                        {typeof addr.latitude === 'number' ? addr.latitude.toFixed(6) : addr.latitude}, {typeof addr.longitude === 'number' ? addr.longitude.toFixed(6) : addr.longitude}
                       </Text>
                     </View>
 
@@ -560,26 +573,27 @@ export default function PinPointScreen() {
                         setSelectedAddress({ ...addr, qrPayload: qrValue });
                         setShowQRModal(true);
                       }}
+                      style={{ width: 58, height: 58, borderRadius: 17, backgroundColor: colors.greenMint, alignItems: 'center', justifyContent: 'center' }}
                     >
-                      <Ionicons name="qr-code" size={40} color={colors.accent} />
+                      <Ionicons name="qr-code" size={32} color={colors.greenDeep} />
                     </TouchableOpacity>
                   </View>
 
-                  <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
                     <TouchableOpacity
                       onPress={() => shareAddress(addr)}
-                      style={{ flex: 1, backgroundColor: colors.success, borderRadius: 8, padding: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 }}
+                      style={{ flex: 1, backgroundColor: colors.greenTeal, borderRadius: 11, paddingVertical: 11, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
                     >
-                      <Ionicons name="share" size={16} color="#fff" />
-                      <Text style={{ color: '#fff', fontSize: 12 }}>Share</Text>
+                      <Ionicons name="share-outline" size={17} color="#fff" />
+                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Share</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       onPress={() => deleteAddress(addr.id)}
-                      style={{ flex: 1, backgroundColor: colors.error, borderRadius: 8, padding: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 }}
+                      style={{ flex: 1, backgroundColor: colors.error, borderRadius: 11, paddingVertical: 11, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
                     >
-                      <Ionicons name="trash" size={16} color="#fff" />
-                      <Text style={{ color: '#fff', fontSize: 12 }}>Delete</Text>
+                      <Ionicons name="trash-outline" size={17} color="#fff" />
+                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Delete</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -588,9 +602,39 @@ export default function PinPointScreen() {
           )}
         </View>
 
-        <View style={{ margin: 16, marginBottom: 32 }}>
+        <View style={{
+          marginHorizontal: 16,
+          marginTop: 12,
+          marginBottom: 20,
+          backgroundColor: colors.surface,
+          borderRadius: 20,
+          padding: 18,
+          borderWidth: 1,
+          borderColor: sosActive ? colors.success : colors.error,
+          elevation: isDark ? 0 : 3,
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
+            <View style={{
+              width: 45,
+              height: 45,
+              borderRadius: 14,
+              backgroundColor: sosActive ? colors.successLight : colors.errorLight,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 12,
+            }}>
+              <Ionicons name={sosActive ? 'checkmark-circle' : 'shield'} size={24} color={sosActive ? colors.success : colors.error} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>Emergency SOS</Text>
+              <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 3 }}>
+                {sosActive ? 'Your live location is being shared' : 'Hold the button for 5 seconds'}
+              </Text>
+            </View>
+          </View>
+
           <TouchableOpacity
-            style={{ backgroundColor: sosActive ? colors.success : colors.error, borderRadius: 12, padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10 }}
+            style={{ backgroundColor: sosActive ? colors.success : colors.error, borderRadius: 15, paddingVertical: 17, paddingHorizontal: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10 }}
             onPress={sosActive ? stopSos : undefined}
             onPressIn={startSosHold}
             onPressOut={cancelSosHold}
@@ -599,40 +643,63 @@ export default function PinPointScreen() {
             {sosStarting ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Ionicons name={sosActive ? 'checkmark-circle' : 'alert-circle'} size={24} color="#fff" />
+              <Ionicons name={sosActive ? 'checkmark-circle' : 'alert-circle'} size={25} color="#fff" />
             )}
-            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>
+            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>
               {sosActive ? 'Stop SOS Live Tracking' : `Hold ${holdCountdown}s to Send SOS`}
             </Text>
           </TouchableOpacity>
+
           {sosActive && isValidRemoteId(sosAlertId) && (
             <TouchableOpacity
-              style={{ marginTop: 10, borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.error }}
+              style={{ marginTop: 10, borderRadius: 12, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: colors.greenTeal, backgroundColor: colors.greenMint }}
               onPress={() => router.push(`/sos/${sosAlertId}`)}
             >
-              <Text style={{ color: colors.error, fontWeight: '600' }}>View Live Tracking</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                <Ionicons name="navigate" size={17} color={colors.greenTeal} />
+                <Text style={{ color: colors.greenTeal, fontWeight: '700' }}>View Live Tracking</Text>
+              </View>
             </TouchableOpacity>
           )}
         </View>
 
-        <Modal visible={showQRModal} animationType="slide" transparent={true}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
-            <View style={{ backgroundColor: colors.surface, borderRadius: 20, padding: 24, alignItems: 'center', width: '80%' }}>
-              <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Your PinPoint QR Code</Text>
+        <Modal visible={showQRModal} animationType="fade" transparent onRequestClose={() => setShowQRModal(false)}>
+          <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+            <View style={{ backgroundColor: colors.surface, borderRadius: 24, padding: 22, alignItems: 'center', width: '90%', borderWidth: 1, borderColor: colors.border }}>
+              <View style={{ width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                <View>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>PinPoint QR Code</Text>
+                  <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 3 }}>Scan to view this location</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowQRModal(false)}
+                  style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.greenMint, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Ionicons name="close" size={21} color={colors.greenDeep} />
+                </TouchableOpacity>
+              </View>
 
               {selectedAddress && (
-                <QRCode value={selectedAddress.qrPayload} size={200} />
+                <View style={{ backgroundColor: '#fff', padding: 18, borderRadius: 18, borderWidth: 1, borderColor: colors.border }}>
+                  <QRCode value={selectedAddress.qrPayload} size={200} />
+                </View>
               )}
 
-              <Text style={{ marginTop: 16, textAlign: 'center', fontSize: 12, color: colors.textLight }}>
-                Scan to open this location in Google Maps
+              {selectedAddress && (
+                <View style={{ marginTop: 16, backgroundColor: colors.greenSage, paddingVertical: 10, paddingHorizontal: 15, borderRadius: 12, width: '100%', alignItems: 'center' }}>
+                  <Text style={{ color: colors.greenDeep, fontWeight: '800', fontSize: 14 }}>{selectedAddress.digitalAddress}</Text>
+                </View>
+              )}
+
+              <Text style={{ marginTop: 12, textAlign: 'center', fontSize: 12, color: colors.textLight, lineHeight: 18 }}>
+                Scan this QR code to open this PinPoint location in Google Maps.
               </Text>
 
               <TouchableOpacity
                 onPress={() => setShowQRModal(false)}
-                style={{ marginTop: 20, backgroundColor: colors.accent, borderRadius: 8, padding: 12, width: '100%', alignItems: 'center' }}
+                style={{ marginTop: 18, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 13, width: '100%', alignItems: 'center' }}
               >
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Close</Text>
+                <Text style={{ color: colors.textInverse, fontWeight: '800' }}>Close</Text>
               </TouchableOpacity>
             </View>
           </View>

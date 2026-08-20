@@ -1,23 +1,16 @@
 import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
-import {
-  Ionicons } from '@expo/vector-icons';
-import { useCallback,
-  useEffect,
-  useState } from 'react';
-import { ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TextInput,
-  View
-} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import GlossyCard from '../../components/GlossyCard';
+import GlossyCardSmall from '../../components/GlossyCardSmall';
+import PillButton from '../../components/PillButton';
 import ScreenHeader from '../../components/ScreenHeader';
-import colors from '../../Utils/colors';
+
+import { useTheme } from '../context/ThemeContext';
+
 import { getCurrentUser, getRows, getUserProfile, insertRow, subscribeToTable, updateRow } from '../../config/supabase';
 
 const ALERT_TYPES = ['crime_alert', 'emergency_notice', 'service_update'];
@@ -41,7 +34,16 @@ const getElapsedTime = (dateValue, now) => {
   return alertDate.toLocaleDateString();
 };
 
+const getGreeting = (name) => {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return `Good morning, ${name} 👋`;
+  if (hour >= 12 && hour < 18) return `Good day, ${name} 👋`;
+  return `Good evening, ${name} 👋`;
+};
+
 export default function CommunityFeedScreen() {
+  const { colors } = useTheme();
+
   const [posts, setPosts] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -74,11 +76,10 @@ export default function CommunityFeedScreen() {
 
     try {
       const [ward] = await getRows('wards', { filters: { id: profile.ward_id } });
-
       if (ward) {
         details.wardNumber = details.wardNumber || ward.ward_number || ward.number || null;
-
         const suburbId = profile.suburb_id || ward.suburb_id;
+
         if (!details.suburbName && suburbId) {
           const [suburb] = await getRows('suburbs', { filters: { id: suburbId } });
           details.suburbName = suburb?.name || null;
@@ -103,6 +104,7 @@ export default function CommunityFeedScreen() {
 
   const loadFeed = useCallback(async (profile) => {
     setRefreshing(true);
+
     try {
       if (!profile?.ward_id) {
         setPosts([]);
@@ -110,11 +112,13 @@ export default function CommunityFeedScreen() {
         return;
       }
 
-      const canViewArchive = profile?.role === 'community_leader' || profile?.role === 'leader';
+      const canViewArchive = profile.role === 'community_leader' || profile.role === 'leader';
+
       const postsData = await getRows('posts', {
         filters: { ward_id: profile.ward_id },
         order: [{ column: 'createdAt', ascending: false }],
       });
+
       const activePosts = postsData.filter((post) => post.status !== 'archived');
       const visiblePosts = canViewArchive ? postsData : activePosts;
 
@@ -122,8 +126,9 @@ export default function CommunityFeedScreen() {
         acc[type] = activePosts.find((post) => post.type === type)?.createdAt || null;
         return acc;
       }, {});
-      const crimeAlerts = visiblePosts.filter(p => p.type === 'crime_alert');
-      const others = visiblePosts.filter(p => p.type !== 'crime_alert');
+
+      const crimeAlerts = visiblePosts.filter((post) => post.type === 'crime_alert');
+      const others = visiblePosts.filter((post) => post.type !== 'crime_alert');
 
       setLatestAlerts(latestByType);
       setPosts([...crimeAlerts, ...others]);
@@ -142,6 +147,7 @@ export default function CommunityFeedScreen() {
       setUser(currentUser);
 
       let profile = null;
+
       if (currentUser) {
         profile = await getUserProfile(currentUser.id);
         setUserProfile(profile);
@@ -150,11 +156,15 @@ export default function CommunityFeedScreen() {
 
       await fetchWardDetails(profile);
       await loadFeed(profile);
+
       unsubscribe = subscribeToTable('posts', () => loadFeed(profile));
     };
 
     load();
-    return () => unsubscribe && unsubscribe();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, [fetchWardDetails, loadFeed]);
 
   useEffect(() => {
@@ -163,30 +173,24 @@ export default function CommunityFeedScreen() {
   }, []);
 
   const getCategoryIcon = (type) => {
-    switch(type) {
-      case 'crime_alert': return 'alert-circle';
-      case 'emergency_notice': return 'warning';
-      case 'service_update': return 'construct';
-      default: return 'newspaper';
-    }
+    if (type === 'crime_alert') return 'alert-circle';
+    if (type === 'emergency_notice') return 'warning';
+    if (type === 'service_update') return 'construct';
+    return 'newspaper';
   };
 
   const getCategoryColor = (type) => {
-    switch(type) {
-      case 'crime_alert': return colors.error;
-      case 'emergency_notice': return colors.warning;
-      case 'service_update': return colors.accent;
-      default: return colors.primary;
-    }
+    if (type === 'crime_alert') return colors.error;
+    if (type === 'emergency_notice') return colors.warning;
+    if (type === 'service_update') return colors.primary;
+    return colors.primary;
   };
 
   const getCategoryLabel = (type) => {
-    switch(type) {
-      case 'crime_alert': return 'Crime Alert';
-      case 'emergency_notice': return 'Emergency Notice';
-      case 'service_update': return 'Service Update';
-      default: return 'Update';
-    }
+    if (type === 'crime_alert') return 'Crime Alert';
+    if (type === 'emergency_notice') return 'Emergency Notice';
+    if (type === 'service_update') return 'Service Update';
+    return 'Update';
   };
 
   const handleArchivePost = (post) => {
@@ -201,9 +205,11 @@ export default function CommunityFeedScreen() {
             setArchivingId(post.id);
             try {
               const archivedPost = await updateRow('posts', post.id, { status: 'archived' });
-              setPosts((currentPosts) => currentPosts.map((currentPost) => (
-                currentPost.id === post.id ? { ...currentPost, ...archivedPost } : currentPost
-              )));
+              setPosts((currentPosts) =>
+                currentPosts.map((currentPost) =>
+                  currentPost.id === post.id ? { ...currentPost, ...archivedPost } : currentPost
+                )
+              );
             } catch (error) {
               Alert.alert('Error', 'Failed to archive post. Please try again.');
               console.error('Error archiving post:', error);
@@ -233,36 +239,43 @@ export default function CommunityFeedScreen() {
     }
 
     setSubmitting(true);
+
     try {
+      const firstName = userProfile?.firstName?.trim() || '';
+      const lastName = userProfile?.lastName?.trim() || '';
+      const createdByName = `${firstName} ${lastName}`.trim() || 'Community Leader';
+
       const createdPost = await insertRow('posts', {
         type: newPost.type,
         title: newPost.title,
         description: newPost.description,
         createdBy: user.id,
-        createdByName: user.user_metadata?.full_name || 'Community Leader',
+        createdByName,
         createdAt: new Date().toISOString(),
         status: 'approved',
         priority: newPost.type === 'crime_alert' ? 'high' : 'normal',
-        ward_id: userProfile?.ward_id || null,
-        suburb_id: userProfile?.suburb_id || null,
+        ward_id: userProfile.ward_id,
+        suburb_id: userProfile.suburb_id || null,
       });
 
       setPosts((currentPosts) => {
         const nextPosts = [createdPost, ...currentPosts.filter((post) => post.id !== createdPost.id)];
-        const crimeAlerts = nextPosts.filter(p => p.type === 'crime_alert');
-        const others = nextPosts.filter(p => p.type !== 'crime_alert');
+        const crimeAlerts = nextPosts.filter((post) => post.type === 'crime_alert');
+        const others = nextPosts.filter((post) => post.type !== 'crime_alert');
         return [...crimeAlerts, ...others];
       });
+
       setLatestAlerts((currentAlerts) => ({
         ...currentAlerts,
         [createdPost.type]: createdPost.createdAt,
       }));
+
       Alert.alert('Success', 'Post created successfully');
       setModalVisible(false);
       setNewPost({ title: '', description: '', type: 'crime_alert' });
     } catch (error) {
       Alert.alert('Error', 'Failed to create post');
-      console.error('Error adding document: ', error);
+      console.error('Error adding document:', error);
     } finally {
       setSubmitting(false);
     }
@@ -270,269 +283,249 @@ export default function CommunityFeedScreen() {
 
   const activePosts = posts.filter((post) => post.status !== 'archived');
   const archivedPosts = isLeader ? posts.filter((post) => post.status === 'archived') : [];
-  const filteredPosts = selectedCategory === 'archive'
-    ? archivedPosts
-    : selectedCategory === 'all'
-      ? activePosts
-      : activePosts.filter(post => post.type === selectedCategory);
+
+  const filteredPosts =
+    selectedCategory === 'archive'
+      ? archivedPosts
+      : selectedCategory === 'all'
+        ? activePosts
+        : activePosts.filter((post) => post.type === selectedCategory);
 
   const wardTitle = wardDetails?.wardNumber
     ? `Ward ${wardDetails.wardNumber}`
-    : wardDetails?.wardId
-      ? `Ward ${wardDetails.wardId}`
-      : 'No ward assigned';
+    : wardDetails?.wardId ? `Ward ${wardDetails.wardId}` : 'No ward assigned';
 
   const wardLocation = [wardDetails?.suburbName, wardDetails?.cityName, wardDetails?.provinceName]
     .filter(Boolean)
-    .join(' - ');
+    .join(' • ');
+
+  const firstName = userProfile?.firstName?.trim() || '';
+  const lastName = userProfile?.lastName?.trim() || '';
+  const userName = `${firstName} ${lastName}`.trim() || 'Resident';
 
   return (
     <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1, backgroundColor: colors.background }}>
       <View style={{ flex: 1, backgroundColor: colors.background }}>
-
         <ScreenHeader
-          title="Community Feed"
-          subtitle={wardTitle}
-          meta={wardLocation || (wardDetails ? 'Your community updates' : 'Add your ward to see local updates')}
-          icon="newspaper"
+          title={getGreeting(userName)}
+          subtitle={`Welcome to ${wardTitle}`}
+          meta={wardLocation || 'Add your ward to see local community updates'}
+          icon="people-circle"
         />
 
-
-        {/* Stats row */}
-        <View style={{ flexDirection: 'row', margin: 16, gap: 12 }}>
-          <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
-            <Ionicons name="alert-circle" size={24} color={colors.error} />
-            <Text style={{ fontSize: 14, fontWeight: 'bold', marginTop: 4, color: colors.text }}>{getElapsedTime(latestAlerts.crime_alert, now)}</Text>
-            <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center' }}>Last Ward Crime Reported</Text>
-          </View>
-          <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
-            <Ionicons name="warning" size={24} color={colors.warning} />
-            <Text style={{ fontSize: 14, fontWeight: 'bold', marginTop: 4, color: colors.text }}>{getElapsedTime(latestAlerts.emergency_notice, now)}</Text>
-            <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center' }}>Last Ward Emergency Notice</Text>
-          </View>
-          <View style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2 }}>
-            <Ionicons name="construct" size={24} color={colors.accent} />
-            <Text style={{ fontSize: 14, fontWeight: 'bold', marginTop: 4, color: colors.text }}>{getElapsedTime(latestAlerts.service_update, now)}</Text>
-            <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center' }}>Last Ward Service Update</Text>
-          </View>
+        <View style={{ flexDirection: 'row', paddingHorizontal: 14, gap: 8 }}>
+          {[
+            { icon: 'alert-circle', color: colors.error, time: latestAlerts.crime_alert, label: 'Last Ward Crime' },
+            { icon: 'warning', color: colors.warning, time: latestAlerts.emergency_notice, label: 'Last Emergency' },
+            { icon: 'construct', color: colors.primary, time: latestAlerts.service_update, label: 'Last Service Update' },
+          ].map((item) => (
+            <View key={item.label} style={{ flex: 1 }}>
+              <GlossyCardSmall style={{ marginVertical: 4, minHeight: 82, paddingHorizontal: 10, paddingVertical: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 15,
+                    backgroundColor: `${item.color}18`,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    marginRight: 7,
+                  }}>
+                    <Ionicons name={item.icon} size={16} color={item.color} />
+                  </View>
+                  <Text style={{ color: colors.text, fontSize: 13, fontWeight: '800', flexShrink: 1 }} numberOfLines={1}>
+                    {getElapsedTime(item.time, now)}
+                  </Text>
+                </View>
+                <Text style={{ color: colors.textLight, fontSize: 10, lineHeight: 14, marginTop: 5 }} numberOfLines={2}>
+                  {item.label}
+                </Text>
+              </GlossyCardSmall>
+            </View>
+          ))}
         </View>
 
-        {/* Category Filters */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center', gap: 10 }}
-          style={{ maxHeight: 52, marginBottom: 4 }}
+          style={{ flexGrow: 0, height: 46 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 6, gap: 7 }}
         >
-          {['all', 'crime_alert', 'emergency_notice', 'service_update', ...(isLeader ? ['archive'] : [])].map((category) => (
-            <TouchableOpacity
-              key={category}
-              style={{
-                backgroundColor: selectedCategory === category ? colors.accent : colors.surface,
-                paddingHorizontal: 18,
-                paddingVertical: 8,
-                borderRadius: 20,
-                borderWidth: 1.5,
-                borderColor: selectedCategory === category ? colors.accent : colors.border,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 6,
-                elevation: selectedCategory === category ? 3 : 1,
-                shadowColor: colors.accent,
-                shadowOpacity: selectedCategory === category ? 0.3 : 0,
-                shadowRadius: 4,
-                shadowOffset: { width: 0, height: 2 },
-              }}
-              onPress={() => setSelectedCategory(category)}
-            >
-              <Ionicons
-                name={category === 'all' ? 'apps' : category === 'archive' ? 'archive' : getCategoryIcon(category)}
-                size={13}
-                color={selectedCategory === category ? '#fff' : category === 'archive' ? colors.textLight : getCategoryColor(category)}
+          {[
+            'all',
+            'crime_alert',
+            'emergency_notice',
+            'service_update',
+            ...(isLeader ? ['archive'] : []),
+          ].map((category) => {
+            const isSelected = selectedCategory === category;
+            const title = category === 'all' ? 'All Updates' : category === 'archive' ? 'Archive' : getCategoryLabel(category);
+
+            return (
+              <PillButton
+                key={category}
+                title={title}
+                onPress={() => setSelectedCategory(category)}
+                variant={isSelected ? 'primary' : 'outline'}
+                compact
               />
-              <Text style={{ color: selectedCategory === category ? '#fff' : colors.text, fontWeight: '600', fontSize: 13 }}>
-                {category === 'all' ? 'All' : category === 'archive' ? 'Archive' : getCategoryLabel(category)}
-              </Text>
-            </TouchableOpacity>
-          ))}
+            );
+          })}
         </ScrollView>
 
-        {/* Create Post Button — community leaders only */}
         {isLeader && (
-          <TouchableOpacity
-            style={{ margin: 16, marginBottom: 8, backgroundColor: colors.accent, borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-            onPress={() => setModalVisible(true)}
-          >
-            <Ionicons name="create" size={20} color="#fff" />
-            <Text style={{ color: '#fff', fontWeight: 'bold' }}>Create Community Post</Text>
-          </TouchableOpacity>
+          <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 6 }}>
+            <PillButton
+              title="Create Community Post"
+              onPress={() => setModalVisible(true)}
+              variant="primary"
+              style={{ minHeight: 38 }}
+            />
+          </View>
         )}
 
-        {/* Posts List */}
         <ScrollView
-          style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadFeed(userProfile)} />}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 0, paddingBottom: 30 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadFeed(userProfile)} tintColor={colors.primary} />}
+          showsVerticalScrollIndicator={false}
         >
+          <View style={{ marginTop: 0, marginBottom: 4 }}>
+            <Text style={{ color: colors.text, fontSize: 19, fontWeight: '800' }}>Community Updates</Text>
+            <Text style={{ color: colors.textLight, fontSize: 13, marginTop: 3 }}>What's happening in {wardTitle}</Text>
+          </View>
+
           {filteredPosts.length === 0 ? (
-            <View style={{ padding: 40, alignItems: 'center' }}>
-              <Ionicons name="newspaper-outline" size={60} color={colors.textLight} />
-              <Text style={{ color: colors.textLight, marginTop: 10, textAlign: 'center' }}>
-                {selectedCategory === 'archive'
-                  ? 'No archived posts in your ward yet.'
-                  : 'No posts in your ward yet. Check back later for community updates.'}
-              </Text>
-            </View>
+            <GlossyCard>
+              <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+                <Ionicons name="newspaper-outline" size={52} color={colors.textLight} />
+                <Text style={{ color: colors.textLight, marginTop: 12, textAlign: 'center', lineHeight: 20 }}>
+                  {selectedCategory === 'archive'
+                    ? 'No archived posts in your ward yet.'
+                    : 'No posts in your ward yet. Check back later for community updates.'}
+                </Text>
+              </View>
+            </GlossyCard>
           ) : (
             filteredPosts.map((post) => {
-              const isCrimeAlert = post.type === 'crime_alert';
+              //const isCrimeAlert = post.type === 'crime_alert';
               const isArchiving = archivingId === post.id;
               const isArchived = post.status === 'archived';
+              const categoryColor = getCategoryColor(post.type);
 
               return (
-                <View
-                  key={post.id}
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderRadius: 12,
-                    padding: 16,
-                    marginBottom: 12,
-                    elevation: isCrimeAlert ? 4 : 1,
-                    borderLeftWidth: isCrimeAlert ? 4 : 0,
-                    borderLeftColor: isCrimeAlert ? colors.error : colors.surface,
-                    shadowColor: isCrimeAlert ? colors.error : '#000',
-                    shadowOpacity: isCrimeAlert ? 0.15 : 0.05,
-                    shadowRadius: isCrimeAlert ? 6 : 2,
-                    shadowOffset: { width: 0, height: 2 },
-                    opacity: isArchiving ? 0.5 : 1,
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                    <View style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      backgroundColor: getCategoryColor(post.type) + '20',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                    }}>
-                      <Ionicons name={getCategoryIcon(post.type)} size={20} color={getCategoryColor(post.type)} />
+                <View key={post.id} style={{ opacity: isArchiving ? 0.5 : 1 }}>
+                  <GlossyCard variant="default" style={{ marginVertical: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+                      <View style={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: 21,
+                        backgroundColor: `${categoryColor}18`,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}>
+                        <Ionicons name={getCategoryIcon(post.type)} size={21} color={categoryColor} />
+                      </View>
+
+                      <View style={{ marginLeft: 12, flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '800', color: categoryColor }}>
+                          {getCategoryLabel(post.type)}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 2 }}>
+                          {post.createdByName || 'Community'} • {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : 'Just now'}
+                        </Text>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                        {post.priority === 'high' && (
+                          <View style={{ backgroundColor: colors.error, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
+                            <Text style={{ color: colors.textInverse, fontSize: 9, fontWeight: '800' }}>URGENT</Text>
+                          </View>
+                        )}
+
+                        {isArchived && (
+                          <View style={{ backgroundColor: colors.surfaceSoft, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
+                            <Text style={{ color: colors.textLight, fontSize: 9, fontWeight: '800' }}>ARCHIVED</Text>
+                          </View>
+                        )}
+
+                        {isLeader && !isArchived && (
+                          <TouchableOpacity
+                            onPress={() => handleArchivePost(post)}
+                            disabled={isArchiving}
+                            style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.whiteSoft, justifyContent: 'center', alignItems: 'center' }}
+                          >
+                            {isArchiving ? (
+                              <ActivityIndicator size="small" color={colors.warning} />
+                            ) : (
+                              <Ionicons name="archive-outline" size={17} color={colors.warning} />
+                            )}
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
 
-                    <View style={{ marginLeft: 12, flex: 1 }}>
-                      <Text style={{ fontSize: 14, fontWeight: 'bold', color: getCategoryColor(post.type) }}>
-                        {getCategoryLabel(post.type)}
-                      </Text>
-                      <Text style={{ fontSize: 12, color: colors.textLight }}>
-                        {post.createdByName} • {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : 'Just now'}
-                      </Text>
-                    </View>
+                    <Text style={{ fontSize: 17, fontWeight: '800', color: colors.text, marginBottom: 7 }}>
+                      {post.title}
+                    </Text>
 
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      {post.priority === 'high' && (
-                        <View style={{ backgroundColor: colors.error, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
-                          <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>URGENT</Text>
-                        </View>
-                      )}
-
-                      {isArchived && (
-                        <View style={{ backgroundColor: colors.surfaceSoft, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
-                          <Text style={{ color: colors.textLight, fontSize: 10, fontWeight: 'bold' }}>ARCHIVED</Text>
-                        </View>
-                      )}
-
-                      {isLeader && !isArchived && (
-                        <TouchableOpacity
-                          onPress={() => handleArchivePost(post)}
-                          disabled={isArchiving}
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: 16,
-                            backgroundColor: colors.whiteSoft,
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                          }}
-                        >
-                          {isArchiving
-                            ? <ActivityIndicator size="small" color={colors.warning} />
-                            : <Ionicons name="archive-outline" size={16} color={colors.warning} />
-                          }
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-
-                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 8 }}>
-                    {post.title}
-                  </Text>
-                  <Text style={{ fontSize: 14, color: colors.textLight, marginBottom: 12 }}>
-                    {post.description}
-                  </Text>
+                    <Text style={{ fontSize: 14, lineHeight: 21, color: colors.textLight }}>
+                      {post.description}
+                    </Text>
+                  </GlossyCard>
                 </View>
               );
             })
           )}
-          <View style={{ height: 20 }} />
         </ScrollView>
 
-        {/* Create Post Modal */}
-        <Modal visible={modalVisible} animationType="slide" transparent={true}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{ flex: 1 }}
-          >
-            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+        <Modal visible={modalVisible} animationType="slide" transparent>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+            <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' }}>
               <View style={{
                 backgroundColor: colors.surface,
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
+                borderTopLeftRadius: 28,
+                borderTopRightRadius: 28,
                 padding: 24,
                 paddingBottom: Platform.OS === 'ios' ? 36 : 24,
                 maxHeight: '90%',
               }}>
-                <View style={{ width: 40, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
+                <View style={{ width: 40, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: 18 }} />
 
-                <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 16, color: colors.primary }}>Create Post</Text>
+                <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 18, color: colors.text }}>Create Post</Text>
 
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: colors.text }}>Category</Text>
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', marginBottom: 10, color: colors.text }}>Category</Text>
+
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
                     {['crime_alert', 'emergency_notice', 'service_update'].map((type) => (
-                      <TouchableOpacity
+                      <PillButton
                         key={type}
-                        style={{
-                          flex: 1,
-                          padding: 10,
-                          borderRadius: 8,
-                          backgroundColor: newPost.type === type ? colors.accent : colors.background,
-                          borderWidth: 1,
-                          borderColor: newPost.type === type ? colors.accent : colors.border,
-                        }}
+                        title={getCategoryLabel(type)}
                         onPress={() => setNewPost({ ...newPost, type })}
-                      >
-                        <Text style={{ textAlign: 'center', color: newPost.type === type ? '#fff' : colors.text, fontSize: 12 }}>
-                          {getCategoryLabel(type)}
-                        </Text>
-                      </TouchableOpacity>
+                        variant={newPost.type === type ? 'primary' : 'outline'}
+                        compact
+                      />
                     ))}
                   </View>
 
-                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: colors.text }}>Title</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', marginBottom: 8, color: colors.text }}>Title</Text>
                   <TextInput
-                    style={{ backgroundColor: colors.surfaceRaised, borderRadius: 8, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: colors.border, color: colors.text }}
+                    style={{ backgroundColor: colors.surfaceRaised, borderRadius: 14, padding: 14, marginBottom: 18, borderWidth: 1, borderColor: colors.border, color: colors.text, minHeight: 50 }}
                     placeholder="Post title"
-                    placeholderTextColor={colors.textLight}
+                    placeholderTextColor={colors.inputPlaceholder}
                     selectionColor={colors.accent}
                     value={newPost.title}
                     onChangeText={(text) => setNewPost({ ...newPost, title: text })}
                     returnKeyType="next"
                   />
 
-                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: colors.text }}>Description</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', marginBottom: 8, color: colors.text }}>Description</Text>
                   <TextInput
-                    style={{ backgroundColor: colors.surfaceRaised, borderRadius: 8, padding: 12, marginBottom: 20, borderWidth: 1, borderColor: colors.border, minHeight: 100, textAlignVertical: 'top', color: colors.text }}
+                    style={{ backgroundColor: colors.surfaceRaised, borderRadius: 14, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: colors.border, minHeight: 120, textAlignVertical: 'top', color: colors.text }}
                     placeholder="Post content..."
-                    placeholderTextColor={colors.textLight}
+                    placeholderTextColor={colors.inputPlaceholder}
                     selectionColor={colors.accent}
                     multiline
                     value={newPost.description}
@@ -540,26 +533,14 @@ export default function CommunityFeedScreen() {
                   />
 
                   <View style={{ flexDirection: 'row', gap: 12 }}>
-                    <TouchableOpacity
-                      style={{ flex: 1, backgroundColor: colors.border, borderRadius: 8, padding: 12, alignItems: 'center' }}
-                      onPress={() => setModalVisible(false)}
-                    >
-                      <Text style={{ color: colors.text }}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={{ flex: 1, backgroundColor: colors.accent, borderRadius: 8, padding: 12, alignItems: 'center' }}
-                      onPress={handleCreatePost}
-                      disabled={submitting}
-                    >
-                      {submitting ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold' }}>Post</Text>}
-                    </TouchableOpacity>
+                    <PillButton title="Cancel" onPress={() => setModalVisible(false)} variant="outline" style={{ flex: 1 }} />
+                    <PillButton title="Post" onPress={handleCreatePost} loading={submitting} disabled={submitting} variant="primary" style={{ flex: 1 }} />
                   </View>
                 </ScrollView>
               </View>
             </View>
           </KeyboardAvoidingView>
         </Modal>
-
       </View>
     </SafeAreaView>
   );

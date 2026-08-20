@@ -1,21 +1,13 @@
-import {
-  router } from 'expo-router';
+import { router } from 'expo-router';
 import * as Location from 'expo-location';
-import { useEffect,
-  useRef,
-  useState } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  View
-} from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+
 import TouchableOpacity from '../components/FeedbackTouchableOpacity';
 import SignupDetailsStep from '../components/signup/SignupDetailsStep';
 import SignupHeader from '../components/signup/SignupHeader';
 import SignupOtpStep from '../components/signup/SignupOtpStep';
+
 import { getFriendlySupabaseError, getSupabaseClient, insertRow, upsertRow } from '../config/supabase';
 import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode, searchCountryCodes } from '../Utils/countryCodes';
 import { buildOpenStreetMapAddressLabel, reverseGeocodeWithOpenStreetMap } from '../Utils/openStreetMapLocation';
@@ -27,7 +19,6 @@ const normalizeLocationText = (value = '') => value.toLowerCase().replace(/[^a-z
 
 const findLocationMatch = (items, names) => {
   const normalizedNames = names.filter(Boolean).map(normalizeLocationText);
-
   return items.find((item) => {
     const itemName = normalizeLocationText(item.name || '');
     return normalizedNames.some((name) => itemName.includes(name) || name.includes(itemName));
@@ -41,10 +32,7 @@ const createPinPointAddress = (latitude, longitude) => {
 };
 
 export default function SignupScreen() {
-  // Step management: 'details' to 'otp'
   const [step, setStep] = useState('details');
-
-  // Form fields
   const [selectedRole, setSelectedRole] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -65,7 +53,6 @@ export default function SignupScreen() {
   const [organizationName, setOrganizationName] = useState('');
   const [cpsWardName, setCpsWardName] = useState('');
 
-  //Location Hierarchy States
   const [provinces, setProvinces] = useState([]);
   const [cities, setCities] = useState([]);
   const [suburbs, setSuburbs] = useState([]);
@@ -82,30 +69,23 @@ export default function SignupScreen() {
   const [locationErrors, setLocationErrors] = useState({});
   const filteredCountryCodes = searchCountryCodes(countryCodes, countrySearch);
 
-  //Load Provinces on Mount 
   useEffect(() => {
     countryCodesMountedRef.current = true;
-
     loadProvinces();
     loadCountryCodes();
-
-    return () => {
-      countryCodesMountedRef.current = false;
-    };
+    return () => { countryCodesMountedRef.current = false; };
   }, []);
 
   const loadCountryCodes = async () => {
     setLoadingCountryCodes(true);
-
     try {
       const apiCountryCodes = await fetchCountryCodes();
       if (!countryCodesMountedRef.current || apiCountryCodes.length === 0) return;
-
       setCountryCodes(apiCountryCodes);
-      setSelectedCountry((currentCountry) => (
-        apiCountryCodes.find((country) => country.code === currentCountry.code && country.name === currentCountry.name)
-        || getDefaultCountryCode(apiCountryCodes)
-      ));
+      setSelectedCountry((currentCountry) =>
+        apiCountryCodes.find((country) => country.code === currentCountry.code && country.name === currentCountry.name) ||
+        getDefaultCountryCode(apiCountryCodes)
+      );
     } catch (error) {
       console.error('Error loading country codes:', error);
     } finally {
@@ -128,11 +108,7 @@ export default function SignupScreen() {
     try {
       setLoadingLocations(true);
       const client = getSupabaseClient();
-      const { data, error } = await client
-        .from('provinces')
-        .select('*')
-        .order('name');
-
+      const { data, error } = await client.from('provinces').select('*').order('name');
       if (error) throw error;
       console.log('Provinces loaded:', data?.length || 0);
       setProvinces(data || []);
@@ -148,12 +124,7 @@ export default function SignupScreen() {
     try {
       setLoadingLocations(true);
       const client = getSupabaseClient();
-      const { data, error } = await client
-        .from('cities')
-        .select('*')
-        .eq('province_id', provinceId)
-        .order('name');
-
+      const { data, error } = await client.from('cities').select('*').eq('province_id', provinceId).order('name');
       if (error) throw error;
       console.log('Cities loaded:', data?.length || 0);
       setCities(data || []);
@@ -173,12 +144,7 @@ export default function SignupScreen() {
     try {
       setLoadingLocations(true);
       const client = getSupabaseClient();
-      const { data, error } = await client
-        .from('suburbs')
-        .select('*')
-        .eq('city_id', cityId)
-        .order('name');
-
+      const { data, error } = await client.from('suburbs').select('*').eq('city_id', cityId).order('name');
       if (error) throw error;
       console.log('Suburbs loaded:', data?.length || 0);
       setSuburbs(data || []);
@@ -197,12 +163,7 @@ export default function SignupScreen() {
     try {
       setLoadingLocations(true);
       const client = getSupabaseClient();
-      const { data, error } = await client
-        .from('zones')
-        .select('*')
-        .eq('suburb_id', suburbId)
-        .order('name');
-
+      const { data, error } = await client.from('zones').select('*').eq('suburb_id', suburbId).order('name');
       if (error) throw error;
       console.log('Zones loaded:', data?.length || 0);
       setZones(data || []);
@@ -218,12 +179,7 @@ export default function SignupScreen() {
     try {
       setLoadingLocations(true);
       const client = getSupabaseClient();
-      const { data, error } = await client
-        .from('wards')
-        .select('*')
-        .eq('suburb_id', suburbId)
-        .order('ward_number');
-
+      const { data, error } = await client.from('wards').select('*').eq('suburb_id', suburbId).order('ward_number');
       if (error) throw error;
       console.log('Wards loaded:', data?.length || 0);
       setWards(data || []);
@@ -235,7 +191,6 @@ export default function SignupScreen() {
     }
   };
 
-  //Location Selection Handlers
   const handleProvinceSelect = (province) => {
     setSelectedProvince(province);
     setSelectedCity(null);
@@ -270,16 +225,13 @@ export default function SignupScreen() {
     loadWards(suburb.id);
   };
 
-  const handleZoneSelect = (zone) => {
-    setSelectedZone(zone);
-  };
+  const handleZoneSelect = (zone) => { setSelectedZone(zone); };
 
   const handleWardSelect = (ward) => {
     setSelectedWard(ward);
     setManualWardNumber(String(ward.ward_number || ''));
   };
 
-  //Validate Location 
   const validateLocation = () => {
     setLocationErrors({});
     return true;
@@ -288,95 +240,42 @@ export default function SignupScreen() {
   const applyLocationHierarchyFromGps = async (osmLocation) => {
     const client = getSupabaseClient();
     let availableProvinces = provinces;
-
     if (availableProvinces.length === 0) {
-      const { data: fetchedProvinces, error: provinceError } = await client
-        .from('provinces')
-        .select('*')
-        .order('name');
-
+      const { data: fetchedProvinces, error: provinceError } = await client.from('provinces').select('*').order('name');
       if (provinceError) throw provinceError;
       availableProvinces = fetchedProvinces || [];
       setProvinces(availableProvinces);
     }
-
-    const province = findLocationMatch(availableProvinces, [
-      osmLocation.province,
-      osmLocation.district,
-      osmLocation.cityTown,
-    ]);
-
+    const province = findLocationMatch(availableProvinces, [osmLocation.province, osmLocation.district, osmLocation.cityTown]);
     if (!province) {
       setLocationLookupStatus('Location saved. Select or enter your ward number if you know it.');
       return;
     }
-
     setSelectedProvince(province);
-
-    const { data: provinceCities, error: cityError } = await client
-      .from('cities')
-      .select('*')
-      .eq('province_id', province.id)
-      .order('name');
-
+    const { data: provinceCities, error: cityError } = await client.from('cities').select('*').eq('province_id', province.id).order('name');
     if (cityError) throw cityError;
     setCities(provinceCities || []);
-
-    const city = findLocationMatch(provinceCities || [], [
-      osmLocation.cityTown,
-      osmLocation.district,
-      osmLocation.suburb,
-    ]);
-
+    const city = findLocationMatch(provinceCities || [], [osmLocation.cityTown, osmLocation.district, osmLocation.suburb]);
     if (!city) {
       setLocationLookupStatus('Province matched. Select or enter your ward number if you know it.');
       return;
     }
-
     setSelectedCity(city);
-
-    const { data: citySuburbs, error: suburbError } = await client
-      .from('suburbs')
-      .select('*')
-      .eq('city_id', city.id)
-      .order('name');
-
+    const { data: citySuburbs, error: suburbError } = await client.from('suburbs').select('*').eq('city_id', city.id).order('name');
     if (suburbError) throw suburbError;
     setSuburbs(citySuburbs || []);
-
-    const suburb = findLocationMatch(citySuburbs || [], [
-      osmLocation.suburb,
-      osmLocation.road,
-      osmLocation.cityTown,
-      osmLocation.district,
-    ]);
-
+    const suburb = findLocationMatch(citySuburbs || [], [osmLocation.suburb, osmLocation.road, osmLocation.cityTown, osmLocation.district]);
     if (!suburb) {
       setLocationLookupStatus('City matched. Select or enter your ward number if you know it.');
       return;
     }
-
     setSelectedSuburb(suburb);
-
-    const { data: suburbZones, error: zoneError } = await client
-      .from('zones')
-      .select('*')
-      .eq('suburb_id', suburb.id)
-      .order('name');
-
+    const { data: suburbZones, error: zoneError } = await client.from('zones').select('*').eq('suburb_id', suburb.id).order('name');
     if (!zoneError) setZones(suburbZones || []);
-
-    const { data: suburbWards, error: wardError } = await client
-      .from('wards')
-      .select('*')
-      .eq('suburb_id', suburb.id)
-      .order('ward_number');
-
+    const { data: suburbWards, error: wardError } = await client.from('wards').select('*').eq('suburb_id', suburb.id).order('ward_number');
     if (wardError) throw wardError;
-
     setWards(suburbWards || []);
     setSelectedWard(null);
-
     if (suburbWards?.length > 0) {
       setLocationLookupStatus('Location matched. Select your ward from the list, or enter it manually if you are unsure.');
     } else {
@@ -388,25 +287,18 @@ export default function SignupScreen() {
     setDetectingLocation(true);
     setLocationLookupStatus('');
     setLocationErrors({});
-
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-
       if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Allow location access so we can create your PinPoint address.');
         return;
       }
-
-      const currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Highest,
-      });
+      const currentLocation = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
       const { latitude, longitude } = currentLocation.coords;
       const digitalAddress = createPinPointAddress(latitude, longitude);
       const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
-
       setPinpointLocation({ latitude, longitude, digitalAddress, mapsUrl });
       setLocation(digitalAddress);
-
       try {
         const osmLocation = await reverseGeocodeWithOpenStreetMap(latitude, longitude);
         setLocation(buildOpenStreetMapAddressLabel(osmLocation, digitalAddress));
@@ -423,62 +315,38 @@ export default function SignupScreen() {
     }
   };
 
-  //OTP state 
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''));
   const [verificationId, setVerificationId] = useState(null);
   const [loading, setLoading] = useState(false);
-
   const otpRefs = useRef([]);
 
   const roles = [
-    {
-      id: 'resident',
-      title: 'Resident',
-      description: 'Report incidents and request assistance'
-    },
-    {
-      id: 'community_leader',
-      title: 'Community Leader',
-      description: 'Manage community alerts and review reports'
-    },
-    {
-      id: 'community_protection_service',
-      title: 'Community Protection Services',
-      description: 'Receive ward incidents and coordinate on-duty protection members'
-    }
+    { id: 'resident', title: 'Resident', description: 'Report incidents and request assistance' },
+    { id: 'community_leader', title: 'Community Leader', description: 'Manage community alerts and review reports' },
+    { id: 'community_protection_service', title: 'Community Protection Services', description: 'Receive ward incidents and coordinate on-duty protection members' }
   ];
 
-  //Send OTP 
   const handleSendOTP = async () => {
-    if (!selectedRole) {
-      Alert.alert('Error', 'Please select an account type');
-      return;
-    }
-
+    if (!selectedRole) { Alert.alert('Error', 'Please select an account type'); return; }
     if (!firstName || !lastName || !email || !phoneNumber || !idNumber) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
-
     validateLocation();
-
     if (selectedRole === 'community_leader' && !organizationName) {
       Alert.alert('Error', 'Please enter your community or organisation name');
       return;
     }
-
     if (selectedRole === 'community_protection_service' && !cpsWardName.trim()) {
       Alert.alert('Error', 'Please enter the name of your ward');
       return;
     }
-
     setLoading(true);
     try {
       const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
       const client = getSupabaseClient();
       const { error } = await client.auth.signInWithOtp({ phone: fullPhoneNumber });
       if (error) throw error;
-
       setVerificationId(fullPhoneNumber);
       setStep('otp');
       Alert.alert('OTP Sent', `A verification code was sent to ${fullPhoneNumber}`);
@@ -489,29 +357,20 @@ export default function SignupScreen() {
     }
   };
 
-  //OTP Input Handlers 
   const handleOtpChange = (value, index) => {
     if (!/^\d*$/.test(value)) return;
-
     const newOtp = [...otp];
-
     if (value.length > 1) {
       const digits = value.split('').slice(0, OTP_LENGTH - index);
-      digits.forEach((d, i) => {
-        if (index + i < OTP_LENGTH) newOtp[index + i] = d;
-      });
+      digits.forEach((d, i) => { if (index + i < OTP_LENGTH) newOtp[index + i] = d; });
       setOtp(newOtp);
       const nextIndex = Math.min(index + digits.length, OTP_LENGTH - 1);
       otpRefs.current[nextIndex]?.focus();
       return;
     }
-
     newOtp[index] = value;
     setOtp(newOtp);
-
-    if (value && index < OTP_LENGTH - 1) {
-      otpRefs.current[index + 1]?.focus();
-    }
+    if (value && index < OTP_LENGTH - 1) otpRefs.current[index + 1]?.focus();
   };
 
   const handleOtpKeyPress = (e, index) => {
@@ -520,26 +379,35 @@ export default function SignupScreen() {
     }
   };
 
-  //Verify OTP & Create Account 
   const handleVerifyAndCreate = async () => {
+    console.log('=================================');
+    console.log('VERIFY BUTTON PRESSED');
+    console.log('OTP:', otp);
+    console.log('OTP length:', otp.join('').length);
+    console.log('Verification ID:', verificationId);
+    console.log('=================================');
+
     const otpString = otp.join('');
     if (otpString.length < OTP_LENGTH) {
-      Alert.alert('Error', 'Please enter a 6-digit code');
+      Alert.alert('Incomplete OTP', 'Please enter the 6-digit verification code.');
       return;
     }
-
     setLoading(true);
     try {
       const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
+      console.log('Full phone:', fullPhoneNumber);
+      console.log('Starting Supabase OTP verification...');
       const client = getSupabaseClient();
       const { data, error } = await client.auth.verifyOtp({
         phone: verificationId || fullPhoneNumber,
         token: otpString,
         type: 'sms',
       });
-
-      if (error) throw error;
-      if (!data.user) throw new Error('Could not create Supabase user.');
+      console.log('Supabase verifyOtp response:', { data, error });
+      if (error) { console.error('OTP VERIFICATION ERROR:', error); throw error; }
+      if (!data?.user) { console.error('No Supabase user returned:', data); throw new Error('Could not create Supabase user.'); }
+      console.log('SUPABASE USER CREATED:', data.user.id);
+      console.log('Creating users profile...');
 
       await upsertRow('users', {
         id: data.user.id,
@@ -554,7 +422,6 @@ export default function SignupScreen() {
         responderType: selectedRole === 'community_protection_service' ? 'community_protection_service' : null,
         serviceType: selectedRole === 'community_protection_service' ? 'community_protection_service' : null,
         wardName: selectedRole === 'community_protection_service' ? cpsWardName.trim() : null,
-        // --- Location IDs --------------------------------------------------
         province_id: selectedProvince?.id || null,
         city_id: selectedCity?.id || null,
         suburb_id: selectedSuburb?.id || null,
@@ -575,13 +442,16 @@ export default function SignupScreen() {
           canReviewReports: selectedRole === 'community_leader',
           canRespondToEmergency: selectedRole === 'community_protection_service',
           canClockInForDuty: selectedRole === 'community_protection_service',
-          canSendCommunityAlerts: selectedRole === 'community_leader'
+          canSendCommunityAlerts: selectedRole === 'community_leader',
         },
         createdAt: new Date().toISOString(),
-        isMockUser: false
+        isMockUser: false,
       });
 
+      console.log('USERS PROFILE CREATED');
+
       if (pinpointLocation) {
+        console.log('Creating PinPoint record...');
         await insertRow('pinpoints', {
           userId: data.user.id,
           label: 'Home',
@@ -592,28 +462,24 @@ export default function SignupScreen() {
           qrPayload: pinpointLocation.mapsUrl,
           createdAt: new Date().toISOString(),
         });
+        console.log('PINPOINT CREATED');
       }
 
-      Alert.alert(
-        'Account Created Successfully!',
-        'Your account has been created. Please login to continue.',
-        [
-          {
-            text: 'Go to Login',
-            onPress: () => router.replace('/login')
-          }
-        ]
-      );
-
+      console.log('SIGNUP COMPLETE');
+      Alert.alert('Account Created Successfully!', 'Your account has been created. Please login to continue.', [
+        { text: 'Go to Login', onPress: () => router.replace('/login') },
+      ]);
     } catch (error) {
-      console.error('Signup error:', error);
+      console.error('=================================');
+      console.error('SIGNUP FAILED');
+      console.error(error);
+      console.error('=================================');
       Alert.alert('Signup Failed', getFriendlySupabaseError(error));
     } finally {
       setLoading(false);
     }
   };
 
-  //Render 
   const handleOtpBack = () => {
     setStep('details');
     setOtp(Array(OTP_LENGTH).fill(''));
@@ -651,13 +517,9 @@ export default function SignupScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1, backgroundColor: colors.background }}
-    >
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 40 }}>
         <SignupHeader step={step} />
-
         {step === 'details' ? (
           <SignupDetailsStep
             roles={roles}
@@ -702,11 +564,8 @@ export default function SignupScreen() {
             onVerify={handleVerifyAndCreate}
           />
         )}
-
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
-          <Text style={{ textAlign: 'center', color: colors.text, fontSize: 14 }}>
-            Already have an account?
-          </Text>
+          <Text style={{ textAlign: 'center', color: colors.text, fontSize: 14 }}>Already have an account?</Text>
           <TouchableOpacity onPress={() => router.push('/login')}>
             <Text style={{ fontWeight: 'bold', color: colors.accent }}> Login</Text>
           </TouchableOpacity>

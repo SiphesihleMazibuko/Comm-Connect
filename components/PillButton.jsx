@@ -14,6 +14,7 @@ export default function PillButton({
   variant = 'primary',
   style,
   textStyle,
+  compact = false,
 }) {
   const { colors, isDark } = useTheme();
 
@@ -21,9 +22,6 @@ export default function PillButton({
 
   const getVariantStyles = () => {
     switch (variant) {
-      // ─────────────────────────────────────
-      // SECONDARY
-      // ─────────────────────────────────────
       case 'secondary':
         return {
           backgroundColor: colors.primaryLight,
@@ -34,9 +32,6 @@ export default function PillButton({
           shadow: false,
         };
 
-      // ─────────────────────────────────────
-      // OUTLINE
-      // ─────────────────────────────────────
       case 'outline':
         return {
           backgroundColor: 'transparent',
@@ -47,9 +42,6 @@ export default function PillButton({
           shadow: false,
         };
 
-      // ─────────────────────────────────────
-      // GHOST
-      // ─────────────────────────────────────
       case 'ghost':
         return {
           backgroundColor: 'transparent',
@@ -60,9 +52,6 @@ export default function PillButton({
           shadow: false,
         };
 
-      // ─────────────────────────────────────
-      // EMERGENCY / DANGER
-      // ─────────────────────────────────────
       case 'emergency':
       case 'danger':
         return {
@@ -74,9 +63,6 @@ export default function PillButton({
           shadow: false,
         };
 
-      // ─────────────────────────────────────
-      // SUCCESS
-      // ─────────────────────────────────────
       case 'success':
         return {
           backgroundColor: colors.success,
@@ -87,9 +73,6 @@ export default function PillButton({
           shadow: false,
         };
 
-      // ─────────────────────────────────────
-      // PRIMARY
-      // ─────────────────────────────────────
       default:
         return {
           backgroundColor: colors.primary,
@@ -111,19 +94,24 @@ export default function PillButton({
       disabled={isDisabled}
       style={[
         {
-          width: '100%',
-          minHeight: 54,
+          /*
+           * COMPACT:
+           * No width, height or minHeight is forced.
+           * The button sizes itself around the text.
+           */
+          width: compact ? undefined : '100%',
+          alignSelf: compact ? 'flex-start' : 'stretch',
 
-          paddingVertical: 15,
-          paddingHorizontal: 24,
+          paddingVertical: compact ? 5 : 15,
+          paddingHorizontal: compact ? 11 : 24,
 
-          borderRadius: 27,
+          borderRadius: compact ? 14 : 27,
 
           alignItems: 'center',
           justifyContent: 'center',
 
           flexDirection: 'row',
-          gap: 8,
+          gap: compact ? 4 : 8,
 
           backgroundColor: buttonStyles.backgroundColor,
 
@@ -132,14 +120,13 @@ export default function PillButton({
 
           opacity: isDisabled ? 0.55 : 1,
 
-          // Primary button gets the brand glow.
           shadowColor: buttonStyles.shadow
             ? colors.primary
             : 'transparent',
 
           shadowOffset: {
             width: 0,
-            height: 5,
+            height: compact ? 0 : 5,
           },
 
           shadowOpacity: buttonStyles.shadow
@@ -148,9 +135,13 @@ export default function PillButton({
               : 0.14
             : 0,
 
-          shadowRadius: buttonStyles.shadow ? 10 : 0,
+          shadowRadius: compact ? 0 : 10,
 
-          elevation: buttonStyles.shadow ? 4 : 0,
+          elevation: compact
+            ? 0
+            : buttonStyles.shadow
+              ? 4
+              : 0,
         },
         style,
       ]}
@@ -165,9 +156,13 @@ export default function PillButton({
           style={[
             {
               color: buttonStyles.textColor,
-              fontSize: 16,
+
+              fontSize: compact ? 12 : 16,
+
               fontWeight: '700',
-              letterSpacing: 0.1,
+
+              letterSpacing: compact ? 0 : 0.1,
+
               textAlign: 'center',
             },
             textStyle,
