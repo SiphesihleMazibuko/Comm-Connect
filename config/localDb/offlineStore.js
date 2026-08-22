@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import { Platform } from 'react-native';
 import { uploadReportImages } from '../mediaUpload';
 
 const RECORDS_KEY = 'pinpoint:offline:records';
@@ -17,6 +18,7 @@ const QUEUED_TABLES = new Set([
 let online = true;
 let syncInProgress = false;
 const listeners = new Set();
+const isWebBrowser = Platform.OS === 'web' && typeof window !== 'undefined';
 
 const log = (...args) => console.log('[OfflineSync]', ...args);
 const warn = (...args) => console.warn('[OfflineSync]', ...args);
@@ -102,8 +104,33 @@ export const onConnectivityChange = (listener) => {
   return () => listeners.delete(listener);
 };
 
-export const startConnectivityMonitor = (syncCallback) => (
-  NetInfo.addEventListener((state) => {
+export const startConnectivityMonitor = (syncCallback) => {
+  if (Platform.OS === 'web') {
+    // Expo Router also evaluates this module during server rendering, where
+    // neither browser connectivity events nor AsyncStorage are available.
+    if (!isWebBrowser) return () => {};
+
+    const updateBrowserConnectivity = () => {
+      const nextOnline = window.navigator.onLine !== false;
+      if (online === nextOnline) return;
+      online = nextOnline;
+      log(`Connection changed: ${online ? 'ONLINE' : 'OFFLINE'} (browser)`);
+      listeners.forEach((listener) => listener(online));
+      if (online && syncCallback) {
+        syncCallback().catch((error) => errorLog('Offline sync failed:', error));
+      }
+    };
+
+    online = window.navigator.onLine !== false;
+    window.addEventListener('online', updateBrowserConnectivity);
+    window.addEventListener('offline', updateBrowserConnectivity);
+    return () => {
+      window.removeEventListener('online', updateBrowserConnectivity);
+      window.removeEventListener('offline', updateBrowserConnectivity);
+    };
+  }
+
+  return NetInfo.addEventListener((state) => {
     const nextOnline = state.isConnected !== false && state.isInternetReachable !== false;
 
     if (online === nextOnline) return;
@@ -119,10 +146,17 @@ export const startConnectivityMonitor = (syncCallback) => (
       log('Connection restored. Starting queued sync.');
       syncCallback().catch((error) => errorLog('Offline sync failed:', error));
     }
-  })
-);
+  });
+};
 
 export const refreshConnectivity = async () => {
+  if (Platform.OS === 'web') {
+    // NetInfo reports `none` while Expo Router renders on the web, even when
+    // browser fetches work. Trust the browser's own online state instead.
+    online = typeof window === 'undefined' ? false : window.navigator.onLine !== false;
+    return online;
+  }
+
   try {
     const state = await NetInfo.fetch();
     online = state.isConnected !== false && state.isInternetReachable !== false;

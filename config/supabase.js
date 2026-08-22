@@ -17,6 +17,17 @@ const isBrowser = Platform.OS === "web" && typeof window !== "undefined" && wind
 const isServerRender = Platform.OS === "web" && !isBrowser;
 const offlineLog = (...args) => console.log("[SupabaseOffline]", ...args);
 const offlineWarn = (...args) => console.warn("[SupabaseOffline]", ...args);
+const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
+
+export const withRequestTimeout = (request, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) => {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("REQUEST_TIMEOUT")), timeoutMs);
+  });
+
+  return Promise.race([Promise.resolve(request), timeout])
+    .finally(() => clearTimeout(timeoutId));
+};
 
 // Create storage adapter that works on both web and native
 const createStorage = () => {
@@ -154,7 +165,7 @@ export const getCurrentUser = async () => {
     const {
       data: { user },
       error,
-    } = await supabase.auth.getUser();
+    } = await withRequestTimeout(supabase.auth.getUser());
     if (error) throw error;
     return user;
   } catch (error) {
@@ -438,11 +449,10 @@ export const getUserProfile = async (userId) => {
       return await getLocalRow("users", userId);
     }
 
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", userId)
-      .single();
+    const { data, error } = await withRequestTimeout(
+      supabase.from("users").select("*").eq("id", userId).single(),
+      8000
+    );
 
     if (error) {
       if (error.code === "PGRST116") {
@@ -546,6 +556,10 @@ export const getFriendlySupabaseError = (error) => {
   if (!error) return "An unknown error occurred";
 
   const message = error.message || "";
+
+  if (message === "REQUEST_TIMEOUT") {
+    return "The server took too long to respond. Check your connection and try again.";
+  }
 
   if (message.includes("Invalid login credentials")) {
     return "Invalid phone number or password. Please try again.";

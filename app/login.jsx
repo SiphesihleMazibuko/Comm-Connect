@@ -4,9 +4,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import TouchableOpacity from '../components/FeedbackTouchableOpacity';
-import { getFriendlySupabaseError, getSupabaseClient, getUserProfile } from '../config/supabase';
+import { getFriendlySupabaseError, getSupabaseClient, getUserProfile, withRequestTimeout } from '../config/supabase';
 import { useTheme } from './context/ThemeContext';
 import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode, searchCountryCodes } from '../Utils/countryCodes';
+import { clearOtpAttempts, formatLockoutTime, getOtpAttemptState, isInvalidOtpError, recordFailedOtpAttempt } from '../Utils/otpSecurity';
 
 const OTP_LENGTH = 6;
 
@@ -59,8 +60,13 @@ export default function LoginScreen() {
     const e164 = `${selectedCountry.code}${local}`;
     setLoading(true);
     try {
+      const attemptState = await getOtpAttemptState(e164);
+      if (attemptState.locked) {
+        Alert.alert('Too Many Attempts', `Try again in ${formatLockoutTime(attemptState.lockedUntil)}.`);
+        return;
+      }
       const client = getSupabaseClient();
-      const { error } = await client.auth.signInWithOtp({ phone: e164 });
+      const { error } = await withRequestTimeout(client.auth.signInWithOtp({ phone: e164 }));
       if (error) throw error;
       setVerificationId(e164);
       setStep('otp');
@@ -122,13 +128,18 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
+      const attemptState = await getOtpAttemptState(verificationId);
+      if (attemptState.locked) {
+        throw Object.assign(new Error('OTP_ATTEMPTS_LOCKED'), { lockedUntil: attemptState.lockedUntil });
+      }
       const client = getSupabaseClient();
-      const { data, error } = await client.auth.verifyOtp({
+      const { data, error } = await withRequestTimeout(client.auth.verifyOtp({
         phone: verificationId,
         token: otpString,
         type: 'sms',
-      });
+      }), 20000);
       if (error) throw error;
+      await clearOtpAttempts(verificationId);
       const user = data?.user;
       const userData = user ? await getUserProfile(user.id) : null;
       if (!userData) { router.replace('/(tabs)/communityfeed'); return; }
@@ -141,7 +152,22 @@ export default function LoginScreen() {
       Alert.alert('Invalid User Role', 'Your account does not have a valid role assigned. Please contact your community administrator.');
     } catch (error) {
       console.error('OTP verification error:', error);
-      Alert.alert('Verification Failed', getFriendlySupabaseError(error));
+      if (error?.message === 'OTP_ATTEMPTS_LOCKED') {
+        Alert.alert('Too Many Attempts', `Try again in ${formatLockoutTime(error.lockedUntil)}.`);
+        handleBack();
+      } else if (isInvalidOtpError(error)) {
+        const state = await recordFailedOtpAttempt(verificationId);
+        setOtp(Array(OTP_LENGTH).fill(''));
+        if (state.locked) {
+          await getSupabaseClient().auth.signOut({ scope: 'local' });
+          handleBack();
+          Alert.alert('Verification Locked', `Three incorrect codes were entered. You have been signed out; try again in ${formatLockoutTime(state.lockedUntil)}.`);
+        } else {
+          Alert.alert('Incorrect Code', `${state.remaining} attempt${state.remaining === 1 ? '' : 's'} remaining.`);
+        }
+      } else {
+        Alert.alert('Verification Failed', getFriendlySupabaseError(error));
+      }
     } finally {
       setLoading(false);
     }

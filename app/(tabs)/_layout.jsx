@@ -110,31 +110,15 @@ export default function TabLayout() {
         return;
       }
 
-      let fetchedRole = null;
-      let attempts = 0;
-
-      while (!fetchedRole && attempts < 5) {
-        try {
-          const profile = await getUserProfile(user.id);
-
-          if (profile?.role) {
-            fetchedRole = profile.role;
-          } else {
-            await new Promise((resolve) =>
-              setTimeout(resolve, 1000)
-            );
-          }
-        } catch (error) {
-          console.error('Error fetching user role:', error);
-        }
-
-        attempts++;
-      }
-
-      if (fetchedRole) {
-        setRole(fetchedRole);
-      } else {
-        router.replace('/login');
+      try {
+        const profile = await getUserProfile(user.id);
+        // Some phone-auth users can exist before their public profile row is
+        // created. Give those authenticated users the least-privileged view
+        // instead of bouncing them between the tabs and login forever.
+        setRole(profile?.role || 'resident');
+      } catch (error) {
+        console.error('Error fetching user role:', error);
+        setRole('resident');
       }
 
       setLoading(false);
