@@ -193,91 +193,141 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24, paddingTop: 40, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        <View style={{ alignItems: 'center', marginBottom: 42 }}>
-          <View style={{ width: 110, height: 110, borderRadius: 55, backgroundColor: colors.primaryLight, justifyContent: 'center', alignItems: 'center', marginBottom: 18, borderWidth: 1, borderColor: colors.border }}>
-            <Image source={require('../assets/mat-removebg-preview.png')} style={{ width: 90, height: 90, resizeMode: 'contain' }} />
-          </View>
-          <Text style={{ fontSize: 28, fontWeight: '800', color: colors.text, textAlign: 'center', letterSpacing: -0.5 }}>Welcome Back</Text>
-          <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 8, textAlign: 'center', lineHeight: 20 }}>
-            {step === 'phone' ? 'Log in to your Comm-Connect account' : 'Enter the verification code sent to your phone'}
-          </Text>
-        </View>
+       <View style={{ flex: 1, flexDirection: 'row' }}>
 
-        {step === 'phone' ? (
-          <>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 8 }}>Phone Number</Text>
-            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-              <TouchableOpacity onPress={toggleCountryPicker} style={{ backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 12, minHeight: 52, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={{ fontSize: 18 }}>{selectedCountry.flag}</Text>
-                <Text style={{ fontSize: 15, color: colors.text, fontWeight: '600' }}>{selectedCountry.code}</Text>
-                {loadingCountryCodes ? <ActivityIndicator size="small" color={colors.accent} /> : <Ionicons name={showCountryPicker ? 'chevron-up' : 'chevron-down'} size={15} color={colors.textLight} />}
-              </TouchableOpacity>
-              <TextInput style={[inputStyle, { flex: 1 }]} placeholder="81 234 5678" placeholderTextColor={colors.inputPlaceholder} selectionColor={colors.accent} value={phoneNumber} onChangeText={setPhoneNumber} keyboardType="phone-pad" autoComplete="tel" autoCorrect={false} editable={!loading} />
-            </View>
+      <View
+  style={{flex: 1,backgroundColor: colors.background,}}
+>
+  <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{flexGrow: 1,paddingBottom: 30,}}>
+    <View
+      style={{width: '100%', height: 430,backgroundColor: colors.primaryLight, borderTopLeftRadius: 45, borderTopRightRadius: 45,
+        overflow: 'hidden',}}>
+      <Image source={require('../assets/login-top.png')} style={{width: '100%', height: '100%', resizeMode: 'cover',}} />
+    </View>
+    <View style={{backgroundColor: colors.background, marginTop: -30, borderTopLeftRadius: 38, borderTopRightRadius: 38,paddingHorizontal: 24,
+        paddingTop: 30, paddingBottom: 30,}}>
+    <View style={{alignItems: 'center',marginBottom: 28,}}>
+        <Text style={{fontSize: 30,fontWeight: '800',color: colors.text, textAlign: 'center',letterSpacing: -0.5,}}>
+          Welcome Back
+        </Text>
 
-            {showCountryPicker && (
-              <View style={{ backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 12, overflow: 'hidden', maxHeight: 320 }}>
-                <TextInput style={{ backgroundColor: colors.surfaceRaised, borderRadius: 10, padding: 12, margin: 10, borderWidth: 1, borderColor: colors.border, color: colors.text, minHeight: 46 }} placeholder="Search country or code" placeholderTextColor={colors.inputPlaceholder} selectionColor={colors.accent} value={countrySearch} onChangeText={setCountrySearch} autoCapitalize="none" autoCorrect={false} />
-                {filteredCountryCodes.length === 0 ? (
-                  <Text style={{ color: colors.textLight, padding: 14, textAlign: 'center' }}>No countries found</Text>
-                ) : (
-                  <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                    {filteredCountryCodes.map((country) => {
-                      const selected = selectedCountry.code === country.code && selectedCountry.name === country.name;
-                      return (
-                        <TouchableOpacity key={`${country.name}-${country.code}`} onPress={() => handleCountrySelect(country)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 0.5, borderBottomColor: colors.border, backgroundColor: selected ? colors.primaryLight : colors.surface }}>
-                          <Text style={{ fontSize: 20 }}>{country.flag}</Text>
-                          <Text style={{ fontSize: 15, color: colors.text, flex: 1 }}>{country.countryName || country.name}</Text>
-                          <Text style={{ fontSize: 14, color: colors.textLight }}>{country.code}</Text>
-                          {selected && <Ionicons name="checkmark-circle" size={19} color={colors.accent} />}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                )}
-              </View>
-            )}
+        <Text style={{fontSize: 14,color: colors.textLight,marginTop: 7,textAlign: 'center',lineHeight: 20,}}>
+          {step === 'phone'? 'Log in to your Comm-Connect account': 'Enter the verification code sent to your phone'}
+        </Text>
+      </View>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24, gap: 6 }}>
-              <Ionicons name="information-circle-outline" size={16} color={colors.textLight} />
-              <Text style={{ fontSize: 12, color: colors.textLight, flex: 1 }}>Don't include the country code or leading zero.</Text>
-            </View>
-          </>
-        ) : (
-          <>
-            <View style={{ alignItems: 'center', marginBottom: 20 }}>
-              <View style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-                <Ionicons name="shield-checkmark" size={28} color={colors.accent} />
-              </View>
-              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, textAlign: 'center' }}>Enter verification code</Text>
-              {verificationId && <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center', marginTop: 6 }}>Code sent to {verificationId}</Text>}
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 18 }}>
-              {otp.map((digit, index) => (
-                <TextInput key={index} ref={(ref) => { otpRefs.current[index] = ref; }} style={{ width: 45, height: 56, backgroundColor: colors.inputBackground, borderRadius: 12, borderWidth: digit ? 2 : 1, borderColor: digit ? colors.accent : colors.inputBorder, fontSize: 21, fontWeight: '800', textAlign: 'center', color: colors.text }} value={digit} onChangeText={(value) => handleOtpChange(value, index)} onKeyPress={(event) => handleOtpKeyPress(event, index)} keyboardType="number-pad" selectionColor={colors.accent} maxLength={6} selectTextOnFocus autoFocus={index === 0} editable={!loading} />
-              ))}
-            </View>
-            <TouchableOpacity onPress={handleBack} disabled={loading} style={{ alignItems: 'center', marginBottom: 24 }}>
-              <Text style={{ color: colors.accent, fontSize: 13, fontWeight: '600' }}>← Change phone number</Text>
+      {step === 'phone' ? (<><Text style={{fontSize: 14,fontWeight: '700', color: colors.text, marginBottom: 8,}}>Phone Number</Text>
+          <View style={{flexDirection: 'row', gap: 8,marginBottom: 8,}}>
+
+            <TouchableOpacity onPress={toggleCountryPicker}
+              style={{backgroundColor: colors.surface,borderRadius: 12,paddingHorizontal: 12,minHeight: 52,borderWidth: 1,
+                borderColor: colors.border,flexDirection: 'row',alignItems: 'center',gap: 6,}}>
+              <Text style={{ fontSize: 18 }}>{selectedCountry.flag}</Text>
+              <Text style={{fontSize: 15,color: colors.text,fontWeight: '600',}}>{selectedCountry.code}</Text>
+
+              {loadingCountryCodes ? (<ActivityIndicator size="small" color={colors.accent}
+                  />) : (<Ionicons name={showCountryPicker? 'chevron-up': 'chevron-down'}size={15} color={colors.textLight}/>)}
             </TouchableOpacity>
-          </>
-        )}
 
-        <TouchableOpacity style={{ backgroundColor: colors.accent, borderRadius: 14, padding: 16, minHeight: 54, alignItems: 'center', justifyContent: 'center', marginBottom: 18, opacity: loading ? 0.7 : 1, shadowColor: colors.glossyShadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: isDark ? 0.25 : 0.18, shadowRadius: 8, elevation: 3 }} onPress={step === 'phone' ? handleSendOTP : handleVerifyOTP} disabled={loading}>
-          {loading ? <ActivityIndicator color="#FFFFFF" /> : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Ionicons name={step === 'phone' ? 'send' : 'checkmark-circle'} size={19} color="#FFFFFF" /><Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800' }}>{step === 'phone' ? 'Send OTP' : 'Verify & Login'}</Text></View>}
+            <TextInput style={[inputStyle,{flex: 1,minHeight: 52,},]}
+              placeholder="81 234 5678" placeholderTextColor={colors.inputPlaceholder} selectionColor={colors.accent} value={phoneNumber} onChangeText={setPhoneNumber}
+              keyboardType="phone-pad" autoComplete="tel" autoCorrect={false}editable={!loading}/></View>
+
+          {showCountryPicker && (<View style={{backgroundColor: colors.surface,borderRadius: 12, borderWidth: 1,borderColor: colors.border,
+                marginBottom: 12, overflow: 'hidden', maxHeight: 320,}}>
+              <TextInput style={{backgroundColor: colors.surfaceRaised,borderRadius: 10,padding: 12,margin: 10,borderWidth: 1,borderColor: colors.border,color: colors.text,
+                  minHeight: 46,}}
+                placeholder="Search country or code"
+                placeholderTextColor={colors.inputPlaceholder}
+                selectionColor={colors.accent}
+                value={countrySearch}
+                onChangeText={setCountrySearch}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              {filteredCountryCodes.length === 0 ? (
+                <Text style={{color: colors.textLight, padding: 14, textAlign: 'center',}}>No countries found</Text>) : (
+                <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                  {filteredCountryCodes.map((country) => {const selected = selectedCountry.code === country.code &&
+                      selectedCountry.name === country.name;
+                    return (
+                      <TouchableOpacity key={`${country.name}-${country.code}`}
+                        onPress={() =>handleCountrySelect(country)}
+                        style={{flexDirection: 'row',alignItems: 'center',gap: 12,padding: 14,borderBottomWidth: 0.5,borderBottomColor: colors.border,backgroundColor: selected ? colors.primaryLight : colors.surface,}}>
+                        <Text style={{ fontSize: 20 }}>{country.flag}</Text>
+                        <Text style={{fontSize: 15, color: colors.text,flex: 1, }}>{country.countryName ||country.name}</Text>
+                        <Text style={{fontSize: 14,color: colors.textLight,}} >{country.code}</Text>
+                        {selected && (<Ionicons name="checkmark-circle" size={19} color={colors.accent}/>)}</TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </View>
+          )}
+
+          <View style={{flexDirection: 'row',alignItems: 'flex-start',marginBottom: 24,gap: 6,}}>
+            <Ionicons name="information-circle-outline"size={16}color={colors.textLight}/>
+
+            <Text style={{fontSize: 12,color: colors.textLight,flex: 1,lineHeight: 18,}}>
+              Don't include the country code or leading zero.</Text>
+          </View>
+          </>) : (
+
+        <>
+          <View style={{alignItems: 'center',marginBottom: 20,}}>
+            <View style={{width: 58,height: 58,borderRadius: 29,backgroundColor: colors.primaryLight, alignItems: 'center',justifyContent: 'center',
+                marginBottom: 12,}}><Ionicons name="shield-checkmark" size={28}color={colors.accent}/></View>
+
+            <Text style={{ fontSize: 15, fontWeight: '700',color: colors.text,textAlign: 'center',}}>Enter verification code
+            </Text>{verificationId && (<Text style={{fontSize: 12,color: colors.textLight,textAlign: 'center',marginTop: 6,}}>
+                Code sent to {verificationId}</Text>)}
+          </View>
+
+          <View style={{flexDirection: 'row',justifyContent: 'center',gap: 8,marginBottom: 18,}}>{otp.map((digit, index) => (
+              <TextInput key={index} ref={(ref) => {otpRefs.current[index] = ref;}}
+                style={{width: 45,height: 56,backgroundColor: colors.inputBackground,borderRadius: 12,borderWidth: digit ? 2 : 1,borderColor: digit? colors.accent
+                : colors.inputBorder,fontSize: 21,fontWeight: '800',textAlign: 'center',color: colors.text,}}
+                value={digit} onChangeText={(value) =>handleOtpChange(value, index)}onKeyPress={(event) =>handleOtpKeyPress(event, index)}keyboardType="number-pad"
+                selectionColor={colors.accent}maxLength={6}selectTextOnFocus autoFocus={index === 0}editable={!loading}/>))}
+           </View>
+
+          <TouchableOpacity onPress={handleBack}disabled={loading}style={{alignItems: 'center',marginBottom: 24,}}>
+            <Text style={{color: colors.accent,fontSize: 13,fontWeight: '600',}}>← Change phone number</Text>
+          </TouchableOpacity></>
+      )}
+
+
+      <TouchableOpacity style={{backgroundColor: colors.accent, borderRadius: 14,padding: 16, minHeight: 54,alignItems: 'center',justifyContent: 'center',marginBottom: 18,
+          opacity: loading ? 0.7 : 1,shadowColor: colors.glossyShadow,shadowOffset: {width: 0,height: 4,},shadowOpacity: isDark ? 0.25 : 0.18,shadowRadius: 8,elevation: 3,}}
+        onPress={step === 'phone'? handleSendOTP: handleVerifyOTP}disabled={loading}>
+        {loading ? (
+          <ActivityIndicator color="#FFFFFF" />) : (<View style={{flexDirection: 'row',alignItems: 'center',gap: 8,}}>
+            <Ionicons name={step === 'phone'? 'send' : 'checkmark-circle'}size={19}color="#FFFFFF"/>
+            <Text style={{color: '#FFFFFF',fontSize: 16,fontWeight: '800',}}>{step === 'phone'? 'Send OTP'  : 'Verify & Login'}</Text>
+          </View>)}
+      </TouchableOpacity>
+
+
+      <View style={{flexDirection: 'row',justifyContent: 'center',alignItems: 'center',gap: 4,}}>
+        <Text style={{color: colors.textLight, fontSize: 14,}}> Don't have an account?</Text>
+
+        <TouchableOpacity onPress={() => router.push('/signup')} disabled={loading}>
+          <Text style={{fontWeight: '800',color: colors.accent, fontSize: 14,}}> Sign Up</Text>
         </TouchableOpacity>
+      </View>
 
-        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
-          <Text style={{ color: colors.textLight, fontSize: 14 }}>Don't have an account?</Text>
-          <TouchableOpacity onPress={() => router.push('/signup')} disabled={loading}>
-            <Text style={{ fontWeight: '800', color: colors.accent, fontSize: 14 }}>Sign Up</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={{flexDirection: 'row', alignItems: 'center',justifyContent: 'center', marginTop: 28,gap: 6,}}>
+        <Ionicons name="lock-closed-outline" size={14} color={colors.textMuted}/>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 28, gap: 6 }}>
-          <Ionicons name="lock-closed-outline" size={14} color={colors.textMuted} />
-          <Text style={{ color: colors.textMuted, fontSize: 11, textAlign: 'center' }}>Your phone number is securely verified.</Text>
-        </View>
+        <Text style={{color: colors.textMuted,fontSize: 11,textAlign: 'center',}}> 
+          Your phone number is securely verified.</Text>
+      </View>
+    </View>
+  </ScrollView>
+</View>
+                      
+</View>   
       </ScrollView>
     </KeyboardAvoidingView>
   );
