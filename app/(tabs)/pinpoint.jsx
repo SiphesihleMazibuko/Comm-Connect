@@ -28,10 +28,9 @@ const isValidRemoteId = (value) => (
   `${value}`.trim().toLowerCase() !== 'undefined'
 );
 
-const getEmergencyContacts = (profile) => (
-  Array.isArray(profile?.permissions?.emergencyContacts)
-    ? profile.permissions.emergencyContacts.filter((contact) => contact?.phone?.trim())
-    : []
+const getEmergencyContacts = (profile, contacts = []) => (
+  (contacts.length > 0 ? contacts : profile?.permissions?.emergencyContacts || [])
+    .filter((contact) => contact?.phone?.trim())
 );
 
 export default function PinPointScreen() {
@@ -292,7 +291,12 @@ export default function PinPointScreen() {
 
     try {
       const latestProfile = await getUserProfile(user.id);
-      const emergencyContacts = getEmergencyContacts(latestProfile);
+      const emergencyContactRows = await getRows('emergency_contacts', {
+        eq: [{ column: 'userId', value: user.id }],
+        order: [{ column: 'createdAt', ascending: true }],
+        allowMissingTable: true,
+      });
+      const emergencyContacts = getEmergencyContacts(latestProfile, emergencyContactRows);
 
       if (emergencyContacts.length === 0) {
         Alert.alert('Emergency Contacts Needed', 'Add emergency contacts in Settings before using SOS.');

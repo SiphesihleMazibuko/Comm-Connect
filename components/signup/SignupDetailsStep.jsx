@@ -108,7 +108,7 @@ export default function SignupDetailsStep({
             </View>
           )}
 
-          <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 16 }}>Don't include the country code or leading zero</Text>
+          <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 16 }}>Don&apos;t include the country code or leading zero</Text>
 
           <View style={{ marginBottom: 12 }}>
             <Text style={labelStyle}>ID Number</Text>

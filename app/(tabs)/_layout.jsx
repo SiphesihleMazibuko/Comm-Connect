@@ -194,14 +194,20 @@ export default function TabLayout() {
   // TAB ICONS
   // ============================================================
 
-  const createTabIcon = (name) => (props) => (
-    <GlassTabIcon
-      name={name}
-      {...props}
-      colors={colors}
-      isDark={isDark}
-    />
-  );
+  const createTabIcon = (name) => {
+    const TabIcon = (props) => (
+      <GlassTabIcon
+        name={name}
+        {...props}
+        colors={colors}
+        isDark={isDark}
+      />
+    );
+
+    TabIcon.displayName = `TabIcon(${name})`;
+
+    return TabIcon;
+  };
 
   const communityFeedIcon =
     createTabIcon('newspaper');

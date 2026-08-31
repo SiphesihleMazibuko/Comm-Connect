@@ -387,7 +387,7 @@ export default function ResponderDashboardScreen() {
                 </View>
                 <Text style={{ fontSize: 21, fontWeight: '900', color: colors.text, marginTop: 20 }}>All Clear</Text>
                 <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 8, textAlign: 'center', lineHeight: 21, maxWidth: 310 }}>
-                  No active CPS incidents. You'll be alerted when your community leader dispatches a ward incident.
+                  No active CPS incidents. You&apos;ll be alerted when your community leader dispatches a ward incident.
                 </Text>
               </View>
             ) : (

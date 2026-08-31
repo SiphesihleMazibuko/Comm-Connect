@@ -6,14 +6,18 @@ import { ActivityIndicator, Alert, Modal, ScrollView, Switch, Text, TextInput, V
 import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
 import ScreenHeader from '../../components/ScreenHeader';
 
-import { getCurrentUser, getSupabaseClient, getUserProfile, updateRow } from '../../config/supabase';
+import { deleteRow, getCurrentUser, getRows, getSupabaseClient, getUserProfile, insertRow, updateRow } from '../../config/supabase';
 
 import { useTheme } from '../context/ThemeContext';
 
 const EMPTY_CONTACT = { name: '', relationship: '', phone: '' };
 
-const getEmergencyContacts = (profile) => (
+const getProfileEmergencyContacts = (profile) => (
   Array.isArray(profile?.permissions?.emergencyContacts) ? profile.permissions.emergencyContacts : []
+);
+
+const isUuid = (value) => (
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(`${value || ''}`)
 );
 
 const getRoleLabel = (role) => {
@@ -47,7 +51,7 @@ export default function SettingsScreen() {
       const profile = await getUserProfile(currentUser.id);
       setUserData(profile);
       setAnonymousDefault(profile?.permissions?.anonymousReportsDefault ?? false);
-      setEmergencyContacts(getEmergencyContacts(profile));
+      await loadEmergencyContacts(currentUser.id, profile);
     } catch (error) {
       if (error?.name === 'AuthSessionMissingError') {
         console.log('[SETTINGS] No authentication session. User is logged out.');
@@ -58,6 +62,19 @@ export default function SettingsScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadEmergencyContacts = async (userId, profile = userData) => {
+    if (!userId) return [];
+
+    const contacts = await getRows('emergency_contacts', {
+      eq: [{ column: 'userId', value: userId }],
+      order: [{ column: 'createdAt', ascending: true }],
+      allowMissingTable: true,
+    });
+    const nextContacts = contacts.length > 0 ? contacts : getProfileEmergencyContacts(profile);
+    setEmergencyContacts(nextContacts);
+    return nextContacts;
   };
 
   const updateSetting = async (key, value) => {
@@ -83,14 +100,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const saveEmergencyContacts = async (contacts) => {
-    if (!user?.id) return;
-    const permissions = { ...(userData?.permissions || {}), emergencyContacts: contacts };
-    await updateRow('users', user.id, { permissions });
-    setEmergencyContacts(contacts);
-    setUserData((previous) => ({ ...(previous || {}), permissions }));
-  };
-
   const addEmergencyContact = async () => {
     const name = contactDraft.name.trim();
     const relationship = contactDraft.relationship.trim();
@@ -99,9 +108,15 @@ export default function SettingsScreen() {
     if (!phone) { Alert.alert('Missing Phone Number', 'Please enter the phone number that should receive the SOS SMS.'); return; }
     setSavingContact(true);
     try {
-      const newContact = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, name, relationship, phone };
-      const updatedContacts = [...emergencyContacts, newContact];
-      await saveEmergencyContacts(updatedContacts);
+      const createdContact = await insertRow('emergency_contacts', {
+        userId: user.id,
+        name,
+        relationship,
+        phone,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      setEmergencyContacts((previous) => [...previous, createdContact]);
       setContactDraft(EMPTY_CONTACT);
       setShowContactModal(false);
       Alert.alert('Contact Saved', `${name} has been added as an emergency contact.`);
@@ -118,8 +133,10 @@ export default function SettingsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: async () => {
         try {
-          const updatedContacts = emergencyContacts.filter((contact) => contact.id !== contactId);
-          await saveEmergencyContacts(updatedContacts);
+          if (isUuid(contactId)) {
+            await deleteRow('emergency_contacts', contactId);
+          }
+          setEmergencyContacts((contacts) => contacts.filter((contact) => contact.id !== contactId));
         } catch (error) {
           console.error('[SETTINGS] Remove emergency contact failed:', error);
           Alert.alert('Error', 'Failed to remove emergency contact.');

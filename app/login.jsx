@@ -214,7 +214,7 @@ export default function LoginScreen() {
 
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24, gap: 6 }}>
               <Ionicons name="information-circle-outline" size={16} color={colors.textLight} />
-              <Text style={{ fontSize: 12, color: colors.textLight, flex: 1 }}>Don't include the country code or leading zero.</Text>
+              <Text style={{ fontSize: 12, color: colors.textLight, flex: 1 }}>Don&apos;t include the country code or leading zero.</Text>
             </View>
           </>
         ) : (
@@ -242,7 +242,7 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
-          <Text style={{ color: colors.textLight, fontSize: 14 }}>Don't have an account?</Text>
+          <Text style={{ color: colors.textLight, fontSize: 14 }}>Don&apos;t have an account?</Text>
           <TouchableOpacity onPress={() => router.push('/signup')} disabled={loading}>
             <Text style={{ fontWeight: '800', color: colors.accent, fontSize: 14 }}>Sign Up</Text>
           </TouchableOpacity>

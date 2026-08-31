@@ -392,7 +392,7 @@ export default function CommunityFeedScreen() {
         >
           <View style={{ marginTop: 0, marginBottom: 4 }}>
             <Text style={{ color: colors.text, fontSize: 19, fontWeight: '800' }}>Community Updates</Text>
-            <Text style={{ color: colors.textLight, fontSize: 13, marginTop: 3 }}>What's happening in {wardTitle}</Text>
+            <Text style={{ color: colors.textLight, fontSize: 13, marginTop: 3 }}>What&apos;s happening in {wardTitle}</Text>
           </View>
 
           {filteredPosts.length === 0 ? (
