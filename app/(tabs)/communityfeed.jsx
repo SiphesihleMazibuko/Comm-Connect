@@ -1,8 +1,8 @@
-import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
 
 import GlossyCard from '../../components/GlossyCard';
 import GlossyCardSmall from '../../components/GlossyCardSmall';
@@ -36,9 +36,9 @@ const getElapsedTime = (dateValue, now) => {
 
 const getGreeting = (name) => {
   const hour = new Date().getHours();
-  if (hour >= 5 && hour < 12) return `Good morning, ${name} 👋`;
-  if (hour >= 12 && hour < 18) return `Good day, ${name} 👋`;
-  return `Good evening, ${name} 👋`;
+  if (hour >= 5 && hour < 12) return `Good morning, ${name} `;
+  if (hour >= 12 && hour < 18) return `Good day, ${name} `;
+  return `Good evening, ${name} `;
 };
 
 export default function CommunityFeedScreen() {
