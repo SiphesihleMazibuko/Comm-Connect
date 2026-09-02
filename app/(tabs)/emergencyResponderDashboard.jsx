@@ -50,9 +50,32 @@ const getDirectionsUrl = (dispatch) => {
   return `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}&travelmode=driving`;
 };
 
+const formatDateTime = (value) => {
+  if (!value) return 'Not available';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not available';
+  return date.toLocaleString();
+};
+
+const getSosLocation = (alert) => {
+  const sosLocation = alert?.location || {};
+  return sosLocation.currentLocation || sosLocation;
+};
+
+const getSosMapsUrl = (alert) => {
+  const currentLocation = getSosLocation(alert);
+  if (currentLocation?.mapsUrl) return currentLocation.mapsUrl;
+  if (currentLocation?.latitude && currentLocation?.longitude) {
+    return `https://www.google.com/maps?q=${currentLocation.latitude},${currentLocation.longitude}`;
+  }
+  return null;
+};
+
 export default function ResponderDashboardScreen() {
   const { colors } = useTheme();
   const [dispatches, setDispatches] = useState([]);
+  const [sosAlerts, setSosAlerts] = useState([]);
+  const [activeTab, setActiveTab] = useState('dispatches');
   const [loading, setLoading] = useState(true);
   const [responderServiceType, setResponderServiceType] = useState('community_protection_service');
   const [profile, setProfile] = useState(null);
@@ -73,6 +96,12 @@ export default function ResponderDashboardScreen() {
     const unsubscribe = subscribeToDispatches(responderServiceType, profile);
     return () => { if (unsubscribe) unsubscribe(); };
   }, [responderServiceType, profile]);
+
+  useEffect(() => {
+    if (!profile) return undefined;
+    const unsubscribe = subscribeToSosAlerts(profile);
+    return () => { if (unsubscribe) unsubscribe(); };
+  }, [profile]);
 
   useEffect(() => {
     const hasPending = dispatches.some((dispatch) => dispatch.status === 'pending');
@@ -123,6 +152,25 @@ export default function ResponderDashboardScreen() {
     return subscribeToTable('emergency_dispatches', loadDispatches);
   };
 
+  const subscribeToSosAlerts = (userProfile) => {
+    const loadSosAlerts = async () => {
+      try {
+        const filters = { emergencyType: 'sos', status: 'active' };
+        if (userProfile?.ward_id) filters.ward_id = userProfile.ward_id;
+        const data = await getRows('emergencyRequests', {
+          filters,
+          order: [{ column: 'createdAt', ascending: false }],
+        });
+        setSosAlerts(data || []);
+      } catch (error) {
+        console.error('SOS tracking listener error:', error);
+      }
+    };
+
+    loadSosAlerts();
+    return subscribeToTable('emergencyRequests', loadSosAlerts);
+  };
+
   const updateDispatchStatus = async (dispatchId, newStatus) => {
     setUpdatingId(dispatchId);
     try {
@@ -165,6 +213,7 @@ export default function ResponderDashboardScreen() {
 
   const serviceConfig = SERVICE_CONFIG[responderServiceType] || SERVICE_CONFIG.community_protection_service;
   const pendingCount = dispatches.filter((dispatch) => dispatch.status === 'pending').length;
+  const activeSosCount = sosAlerts.length;
   const wardLabel = profile?.wardName || profile?.ward_name || profile?.permissions?.manualWardNumber || profile?.ward_number || profile?.ward_id;
 
   const getStatusColors = (status) => {
@@ -285,6 +334,80 @@ export default function ResponderDashboardScreen() {
     );
   };
 
+  const SosTrackingCard = ({ alert }) => {
+    const sosLocation = alert?.location || {};
+    const currentLocation = getSosLocation(alert);
+    const mapsUrl = getSosMapsUrl(alert);
+    const locationHistory = Array.isArray(sosLocation.locationHistory) ? sosLocation.locationHistory : [];
+    const lastUpdated = sosLocation.lastLocationAt || currentLocation?.recordedAt || alert.createdAt;
+    const hasLocation = Number.isFinite(Number(currentLocation?.latitude)) && Number.isFinite(Number(currentLocation?.longitude));
+
+    return (
+      <View style={{
+        backgroundColor: colors.surface,
+        borderRadius: 18,
+        padding: 16,
+        marginBottom: 13,
+        borderWidth: 1,
+        borderColor: colors.error + '55',
+        borderLeftWidth: 4,
+        borderLeftColor: colors.error,
+      }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, flex: 1 }}>
+            <View style={{ width: 34, height: 34, borderRadius: 12, backgroundColor: colors.errorLight || `${colors.error}20`, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="alert-circle" size={20} color={colors.error} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontWeight: '900', fontSize: 15 }} numberOfLines={1}>{alert.userName || 'PinPoint user'}</Text>
+              {!!alert.userPhone && <Text style={{ color: colors.textLight, fontSize: 11, marginTop: 2 }} numberOfLines={1}>{alert.userPhone}</Text>}
+            </View>
+          </View>
+          <View style={{ backgroundColor: colors.errorLight || `${colors.error}18`, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 }}>
+            <Text style={{ color: colors.error, fontSize: 11, fontWeight: '900' }}>LIVE SOS</Text>
+          </View>
+        </View>
+
+        <View style={{ backgroundColor: colors.surfaceRaised || colors.background, borderRadius: 14, padding: 13, borderWidth: 1, borderColor: colors.border }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Ionicons name="location" size={17} color={hasLocation ? colors.primary : colors.textLight} />
+            <Text style={{ color: colors.text, fontWeight: '800', fontSize: 13, marginLeft: 7 }}>
+              Current Location
+            </Text>
+          </View>
+          {hasLocation ? (
+            <>
+              <Text style={{ color: colors.text, fontSize: 15, fontWeight: '800' }}>
+                {Number(currentLocation.latitude).toFixed(6)}, {Number(currentLocation.longitude).toFixed(6)}
+              </Text>
+              {!!currentLocation.accuracy && (
+                <Text style={{ color: colors.textLight, marginTop: 5, fontSize: 12 }}>
+                  Accuracy: {Math.round(currentLocation.accuracy)}m
+                </Text>
+              )}
+            </>
+          ) : (
+            <Text style={{ color: colors.textLight, fontSize: 13 }}>Waiting for the first location update.</Text>
+          )}
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.textLight, fontSize: 11, fontWeight: '700' }}>LAST UPDATE</Text>
+            <Text style={{ color: colors.text, fontSize: 12, marginTop: 3 }} numberOfLines={1}>{formatDateTime(lastUpdated)}</Text>
+            <Text style={{ color: colors.textLight, fontSize: 11, marginTop: 3 }}>{locationHistory.length} tracked update{locationHistory.length === 1 ? '' : 's'}</Text>
+          </View>
+          {mapsUrl && (
+            <TouchableOpacity onPress={() => Linking.openURL(mapsUrl)} style={{ backgroundColor: colors.primary, borderRadius: 13, paddingHorizontal: 13, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+              <Ionicons name="map" size={16} color="#001B0B" />
+              <Text style={{ color: '#001B0B', fontWeight: '900', fontSize: 12 }}>Open Map</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
@@ -328,7 +451,9 @@ export default function ResponderDashboardScreen() {
               <Text style={{ fontSize: 14, color: colors.textLight, fontWeight: '600' }}>{wardLabel ? `Ward ${wardLabel}` : 'No ward assigned'}</Text>
             </View>
             <Text style={{ fontSize: 13, color: colors.textLighter || colors.textLight, marginTop: 8 }}>
-              {dispatches.length === 0 ? 'No active incidents' : `${dispatches.length} active · ${pendingCount} new`}
+              {dispatches.length === 0 && activeSosCount === 0
+                ? 'No active incidents'
+                : `${dispatches.length} dispatches · ${pendingCount} new · ${activeSosCount} live SOS`}
             </Text>
             <View style={{ position: 'absolute', right: 24, top: 42, alignItems: 'center' }}>
               <View style={{
@@ -367,7 +492,25 @@ export default function ResponderDashboardScreen() {
           </LinearGradient>
 
           <View style={{ paddingHorizontal: 16, paddingTop: 22 }}>
-            {dispatches.length === 0 ? (
+            <View style={{ flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 14, padding: 4, borderWidth: 1, borderColor: colors.border, marginBottom: 18 }}>
+              {[
+                { id: 'dispatches', label: 'Dispatches', count: dispatches.length, icon: 'list' },
+                { id: 'sos', label: 'SOS Tracking', count: activeSosCount, icon: 'radio' },
+              ].map((tab) => {
+                const selected = activeTab === tab.id;
+                return (
+                  <TouchableOpacity key={tab.id} onPress={() => setActiveTab(tab.id)} style={{ flex: 1, backgroundColor: selected ? colors.primary : 'transparent', borderRadius: 11, paddingVertical: 11, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    <Ionicons name={tab.icon} size={16} color={selected ? '#001B0B' : colors.textLight} />
+                    <Text style={{ color: selected ? '#001B0B' : colors.text, fontSize: 12, fontWeight: '900' }} numberOfLines={1}>{tab.label}</Text>
+                    <View style={{ minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: selected ? 'rgba(0,27,11,0.14)' : colors.surfaceRaised || colors.background }}>
+                      <Text style={{ color: selected ? '#001B0B' : colors.textLight, fontSize: 11, fontWeight: '900' }}>{tab.count}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {activeTab === 'dispatches' && dispatches.length === 0 ? (
               <View style={{ alignItems: 'center', paddingVertical: 70 }}>
                 <View style={{
                   width: 88,
@@ -390,13 +533,40 @@ export default function ResponderDashboardScreen() {
                   No active CPS incidents. You&apos;ll be alerted when your community leader dispatches a ward incident.
                 </Text>
               </View>
-            ) : (
+            ) : activeTab === 'dispatches' ? (
               <>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
                   <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: colors.primary, marginRight: 8 }} />
                   <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textLight, textTransform: 'uppercase', letterSpacing: 1 }}>Active Dispatches</Text>
                 </View>
                 {dispatches.map((dispatch) => <DispatchCard key={dispatch.id} dispatch={dispatch} />)}
+              </>
+            ) : sosAlerts.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 70 }}>
+                <View style={{
+                  width: 88,
+                  height: 88,
+                  borderRadius: 44,
+                  backgroundColor: colors.errorLight || `${colors.error}12`,
+                  borderWidth: 1,
+                  borderColor: colors.error + '30',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}>
+                  <Ionicons name="shield-checkmark-outline" size={50} color={colors.error} />
+                </View>
+                <Text style={{ fontSize: 21, fontWeight: '900', color: colors.text, marginTop: 20 }}>No Live SOS</Text>
+                <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 8, textAlign: 'center', lineHeight: 21, maxWidth: 310 }}>
+                  Active SOS triggers in your ward will appear here with their latest live location.
+                </Text>
+              </View>
+            ) : (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+                  <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: colors.error, marginRight: 8 }} />
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textLight, textTransform: 'uppercase', letterSpacing: 1 }}>Live SOS Tracking</Text>
+                </View>
+                {sosAlerts.map((alert) => <SosTrackingCard key={alert.id} alert={alert} />)}
               </>
             )}
           </View>

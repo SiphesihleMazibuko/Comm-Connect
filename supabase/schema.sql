@@ -34,12 +34,41 @@ alter table public.users add column if not exists ward_id uuid;
 
 alter table public.users enable row level security;
 
+create schema if not exists private;
+
+create or replace function private.current_user_ward_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select users.ward_id
+  from public.users
+  where users.id = auth.uid();
+$$;
+
+revoke all on function private.current_user_ward_id() from public;
+grant usage on schema private to authenticated;
+grant execute on function private.current_user_ward_id() to authenticated;
+
 drop policy if exists "Users can read their own profile" on public.users;
 create policy "Users can read their own profile"
 on public.users
 for select
 to authenticated
 using (id = auth.uid());
+
+drop policy if exists "Users can read ward CPF member profiles" on public.users;
+create policy "Users can read ward CPF member profiles"
+on public.users
+for select
+to authenticated
+using (
+  role in ('community_protection_service', 'emergency_responder')
+  and ward_id is not null
+  and ward_id = private.current_user_ward_id()
+);
 
 drop policy if exists "Users can create their own profile" on public.users;
 create policy "Users can create their own profile"
@@ -421,8 +450,6 @@ grant select, insert, update on public.emergency_dispatches to authenticated;
 grant select, insert, update on public.cps_duty_sessions to authenticated;
 grant select, insert, update on public."emergencyRequests" to authenticated;
 grant select, insert, update, delete on public.emergency_contacts to authenticated;
-
-create schema if not exists private;
 
 create table if not exists public.audit_logs (
   id bigint generated always as identity primary key,

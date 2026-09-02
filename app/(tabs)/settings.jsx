@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 
 import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
 import ScreenHeader from '../../components/ScreenHeader';
 
 import { deleteRow, getCurrentUser, getRows, getSupabaseClient, getUserProfile, insertRow, updateRow } from '../../config/supabase';
+import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode, searchCountryCodes } from '../../Utils/countryCodes';
 
 import { useTheme } from '../context/ThemeContext';
 
@@ -26,6 +27,12 @@ const getRoleLabel = (role) => {
   return 'Resident';
 };
 
+const normalizePhoneNumber = (countryCode, phoneNumber) => {
+  const trimmedPhone = phoneNumber.trim();
+  if (trimmedPhone.startsWith('+')) return trimmedPhone.replace(/\s/g, '');
+  return `${countryCode}${trimmedPhone.replace(/\s/g, '').replace(/^0+/, '')}`;
+};
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { colors, isDark, toggleTheme } = useTheme();
@@ -39,8 +46,48 @@ export default function SettingsScreen() {
   const [contactDraft, setContactDraft] = useState(EMPTY_CONTACT);
   const [savingContact, setSavingContact] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [countryCodes, setCountryCodes] = useState(FALLBACK_COUNTRY_CODES);
+  const [selectedCountry, setSelectedCountry] = useState(getDefaultCountryCode());
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [loadingCountryCodes, setLoadingCountryCodes] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
+  const countryCodesMountedRef = useRef(true);
+  const filteredCountryCodes = searchCountryCodes(countryCodes, countrySearch);
 
-  useEffect(() => { loadUserSettings(); }, []);
+  useEffect(() => {
+    countryCodesMountedRef.current = true;
+    loadUserSettings();
+    loadCountryCodes();
+    return () => { countryCodesMountedRef.current = false; };
+  }, []);
+
+  const loadCountryCodes = async () => {
+    setLoadingCountryCodes(true);
+    try {
+      const apiCountryCodes = await fetchCountryCodes();
+      if (!countryCodesMountedRef.current || apiCountryCodes.length === 0) return;
+      setCountryCodes(apiCountryCodes);
+      setSelectedCountry((currentCountry) =>
+        apiCountryCodes.find((country) => country.code === currentCountry.code && country.name === currentCountry.name) ||
+        getDefaultCountryCode(apiCountryCodes)
+      );
+    } catch (error) {
+      console.error('[SETTINGS] Error loading country codes:', error);
+    } finally {
+      if (countryCodesMountedRef.current) setLoadingCountryCodes(false);
+    }
+  };
+
+  const toggleCountryPicker = () => {
+    if (showCountryPicker) setCountrySearch('');
+    setShowCountryPicker(!showCountryPicker);
+  };
+
+  const handleCountrySelect = (country) => {
+    setSelectedCountry(country);
+    setCountrySearch('');
+    setShowCountryPicker(false);
+  };
 
   const loadUserSettings = async () => {
     try {
@@ -103,9 +150,9 @@ export default function SettingsScreen() {
   const addEmergencyContact = async () => {
     const name = contactDraft.name.trim();
     const relationship = contactDraft.relationship.trim();
-    const phone = contactDraft.phone.trim();
+    const phone = normalizePhoneNumber(selectedCountry.code, contactDraft.phone);
     if (!name) { Alert.alert('Missing Name', 'Please enter the contact name.'); return; }
-    if (!phone) { Alert.alert('Missing Phone Number', 'Please enter the phone number that should receive the SOS SMS.'); return; }
+    if (!contactDraft.phone.trim()) { Alert.alert('Missing Phone Number', 'Please enter the phone number that should receive the SOS SMS.'); return; }
     setSavingContact(true);
     try {
       const createdContact = await insertRow('emergency_contacts', {
@@ -322,7 +369,41 @@ export default function SettingsScreen() {
               <TextInput style={{ backgroundColor: colors.surfaceLight || colors.background, color: colors.text, borderColor: colors.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, marginBottom: 12, fontSize: 14 }} placeholder="e.g. Mother, Partner, Friend" placeholderTextColor={colors.inputPlaceholder || colors.textLight} selectionColor={colors.primary} value={contactDraft.relationship} onChangeText={(value) => setContactDraft((previous) => ({ ...previous, relationship: value }))} autoCapitalize="words" />
 
               <Text style={{ color: colors.text, fontSize: 12, fontWeight: '700', marginBottom: 6 }}>PHONE NUMBER</Text>
-              <TextInput style={{ backgroundColor: colors.surfaceLight || colors.background, color: colors.text, borderColor: colors.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, marginBottom: 18, fontSize: 14 }} placeholder="+27 82 123 4567" placeholderTextColor={colors.inputPlaceholder || colors.textLight} selectionColor={colors.primary} keyboardType="phone-pad" value={contactDraft.phone} onChangeText={(value) => setContactDraft((previous) => ({ ...previous, phone: value }))} autoComplete="tel" />
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity onPress={toggleCountryPicker} style={{ backgroundColor: colors.surfaceLight || colors.background, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 13, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={{ fontSize: 18 }}>{selectedCountry.flag}</Text>
+                  <Text style={{ fontSize: 14, color: colors.text, fontWeight: '700' }}>{selectedCountry.code}</Text>
+                  {loadingCountryCodes ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="chevron-down" size={14} color={colors.textLight} />}
+                </TouchableOpacity>
+                <TextInput style={{ flex: 1, backgroundColor: colors.surfaceLight || colors.background, color: colors.text, borderColor: colors.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, fontSize: 14 }} placeholder="81 234 5678" placeholderTextColor={colors.inputPlaceholder || colors.textLight} selectionColor={colors.primary} keyboardType="phone-pad" value={contactDraft.phone} onChangeText={(value) => setContactDraft((previous) => ({ ...previous, phone: value }))} autoComplete="tel" />
+              </View>
+
+              {showCountryPicker && (
+                <View style={{ backgroundColor: colors.surfaceLight || colors.background, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginTop: 8, marginBottom: 10, overflow: 'hidden', maxHeight: 210 }}>
+                  <TextInput style={{ backgroundColor: colors.surface, borderRadius: 10, padding: 11, margin: 10, borderWidth: 1, borderColor: colors.border, color: colors.text }} placeholder="Search country or code" placeholderTextColor={colors.inputPlaceholder || colors.textLight} selectionColor={colors.primary} value={countrySearch} onChangeText={setCountrySearch} autoCapitalize="none" />
+                  <ScrollView keyboardShouldPersistTaps="handled">
+                    {filteredCountryCodes.length === 0 ? (
+                      <Text style={{ color: colors.textLight, padding: 14, textAlign: 'center' }}>No countries found</Text>
+                    ) : (
+                      filteredCountryCodes.map((country) => {
+                        const isSelected = selectedCountry.code === country.code && selectedCountry.name === country.name;
+                        return (
+                          <TouchableOpacity key={`${country.name}-${country.code}`} onPress={() => handleCountrySelect(country)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderBottomWidth: 0.5, borderBottomColor: colors.border, backgroundColor: isSelected ? colors.primaryLight : 'transparent' }}>
+                            <Text style={{ fontSize: 19 }}>{country.flag}</Text>
+                            <Text style={{ fontSize: 14, color: colors.text, flex: 1 }} numberOfLines={1}>{country.countryName || country.name}</Text>
+                            <Text style={{ fontSize: 14, color: colors.textLight }}>{country.code}</Text>
+                            {isSelected && <Ionicons name="checkmark-circle" size={17} color={colors.primary} />}
+                          </TouchableOpacity>
+                        );
+                      })
+                    )}
+                  </ScrollView>
+                </View>
+              )}
+
+              <Text style={{ color: colors.textLight, fontSize: 11, marginTop: 6, marginBottom: 18, lineHeight: 16 }}>
+                Select the country code, then enter the local number. A leading zero is ok; it will be removed when saved.
+              </Text>
 
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <TouchableOpacity onPress={() => { setContactDraft(EMPTY_CONTACT); setShowContactModal(false); }} style={{ flex: 1, backgroundColor: colors.surfaceLight || colors.background, borderRadius: 12, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: colors.border }}>

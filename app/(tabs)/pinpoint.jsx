@@ -33,6 +33,33 @@ const getEmergencyContacts = (profile, contacts = []) => (
     .filter((contact) => contact?.phone?.trim())
 );
 
+const getDisplayName = (profile) => {
+  const name = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ').trim();
+  return name || profile?.email || profile?.phoneNumber || 'CPF Member';
+};
+
+const getWardCpfContacts = async (profile) => {
+  if (!profile?.ward_id) return [];
+
+  const wardUsers = await getRows('users', {
+    filters: { ward_id: profile.ward_id },
+  });
+
+  return (wardUsers || [])
+    .filter((wardUser) => (
+      wardUser?.id !== profile.id &&
+      ['community_protection_service', 'emergency_responder'].includes(wardUser?.role) &&
+      wardUser?.phoneNumber?.trim()
+    ))
+    .map((wardUser) => ({
+      id: wardUser.id,
+      name: getDisplayName(wardUser),
+      relationship: 'Ward CPF member',
+      phone: wardUser.phoneNumber,
+      source: 'ward_cpf',
+    }));
+};
+
 export default function PinPointScreen() {
   const { colors, isDark } = useTheme();
 
@@ -297,9 +324,10 @@ export default function PinPointScreen() {
         allowMissingTable: true,
       });
       const emergencyContacts = getEmergencyContacts(latestProfile, emergencyContactRows);
+      const sosContacts = emergencyContacts.length > 0 ? emergencyContacts : await getWardCpfContacts(latestProfile);
 
-      if (emergencyContacts.length === 0) {
-        Alert.alert('Emergency Contacts Needed', 'Add emergency contacts in Settings before using SOS.');
+      if (sosContacts.length === 0) {
+        Alert.alert('SOS Contacts Unavailable', 'No emergency contacts or ward CPF members with phone numbers were found.');
         return;
       }
 
@@ -317,11 +345,14 @@ export default function PinPointScreen() {
         userPhone: latestProfile?.phoneNumber || '',
         emergencyType: 'sos',
         description: 'SOS live location alert',
-        contactDetails: emergencyContacts.map((contact) => contact.phone).filter(Boolean).join(', '),
+        contactDetails: sosContacts.map((contact) => contact.phone).filter(Boolean).join(', '),
         status: 'active',
+        ward_id: latestProfile?.ward_id || null,
+        suburb_id: latestProfile?.suburb_id || null,
         location: {
           type: 'sos',
-          emergencyContacts,
+          emergencyContacts: sosContacts,
+          recipientSource: emergencyContacts.length > 0 ? 'emergency_contacts' : 'ward_cpf',
           currentLocation,
           locationHistory: sosLocationHistoryRef.current,
           shareToken,
@@ -338,7 +369,13 @@ export default function PinPointScreen() {
 
       const trackingUrl = Linking.createURL(`/sos/${alertId}`, { queryParams: { token: shareToken } });
 
-      sosLocationMetaRef.current = { type: 'sos', emergencyContacts, shareToken, trackingUrl };
+      sosLocationMetaRef.current = {
+        type: 'sos',
+        emergencyContacts: sosContacts,
+        recipientSource: emergencyContacts.length > 0 ? 'emergency_contacts' : 'ward_cpf',
+        shareToken,
+        trackingUrl,
+      };
 
       await updateRow('emergencyRequests', alertId, {
         location: {
@@ -350,7 +387,7 @@ export default function PinPointScreen() {
       });
 
       const smsOpened = await notifyEmergencyContactsBySms({
-        contacts: emergencyContacts,
+        contacts: sosContacts,
         alert: { ...alert, id: alertId, userName },
         trackingUrl,
       });

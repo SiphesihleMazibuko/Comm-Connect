@@ -218,13 +218,23 @@ export const getRow = async (table, id) => {
       .from(table)
       .select("*")
       .eq("id", id)
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
+    if (!data) {
+      offlineLog(`getRow(${table}/${id}): no remote row found.`);
+      return await getLocalRow(table, id);
+    }
+
     await cacheRow(table, data);
     offlineLog(`getRow(${table}/${id}): fetched remote row, cached locally.`);
     return data;
   } catch (error) {
+    if (error?.code === "PGRST116") {
+      offlineLog(`getRow(${table}/${id}): no remote row found.`);
+      return await getLocalRow(table, id);
+    }
+
     console.error(`Error getting row from ${table}:`, error);
     offlineWarn(`getRow(${table}/${id}): falling back to local cache.`);
     return await getLocalRow(table, id);
