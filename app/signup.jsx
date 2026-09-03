@@ -8,9 +8,10 @@ import SignupDetailsStep from '../components/signup/SignupDetailsStep';
 import SignupHeader from '../components/signup/SignupHeader';
 import SignupOtpStep from '../components/signup/SignupOtpStep';
 
-import { getFriendlySupabaseError, getSupabaseClient, insertRow, upsertRow } from '../config/supabase';
+import { getFriendlySupabaseError, getSupabaseClient, insertRow, upsertRow, withRequestTimeout } from '../config/supabase';
 import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode, searchCountryCodes } from '../Utils/countryCodes';
 import { buildOpenStreetMapAddressLabel, reverseGeocodeWithOpenStreetMap } from '../Utils/openStreetMapLocation';
+import { clearOtpAttempts, formatLockoutTime, getOtpAttemptState, isInvalidOtpError, recordFailedOtpAttempt } from '../Utils/otpSecurity';
 import colors from '../Utils/colors';
 
 const OTP_LENGTH = 6;
@@ -344,8 +345,13 @@ export default function SignupScreen() {
     setLoading(true);
     try {
       const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
+      const attemptState = await getOtpAttemptState(fullPhoneNumber);
+      if (attemptState.locked) {
+        Alert.alert('Too Many Attempts', `Try again in ${formatLockoutTime(attemptState.lockedUntil)}.`);
+        return;
+      }
       const client = getSupabaseClient();
-      const { error } = await client.auth.signInWithOtp({ phone: fullPhoneNumber });
+      const { error } = await withRequestTimeout(client.auth.signInWithOtp({ phone: fullPhoneNumber }));
       if (error) throw error;
       setVerificationId(fullPhoneNumber);
       setStep('otp');
@@ -380,13 +386,6 @@ export default function SignupScreen() {
   };
 
   const handleVerifyAndCreate = async () => {
-    console.log('=================================');
-    console.log('VERIFY BUTTON PRESSED');
-    console.log('OTP:', otp);
-    console.log('OTP length:', otp.join('').length);
-    console.log('Verification ID:', verificationId);
-    console.log('=================================');
-
     const otpString = otp.join('');
     if (otpString.length < OTP_LENGTH) {
       Alert.alert('Incomplete OTP', 'Please enter the 6-digit verification code.');
@@ -395,20 +394,19 @@ export default function SignupScreen() {
     setLoading(true);
     try {
       const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
-      console.log('Full phone:', fullPhoneNumber);
-      console.log('Starting Supabase OTP verification...');
+      const attemptState = await getOtpAttemptState(verificationId || fullPhoneNumber);
+      if (attemptState.locked) {
+        throw Object.assign(new Error('OTP_ATTEMPTS_LOCKED'), { lockedUntil: attemptState.lockedUntil });
+      }
       const client = getSupabaseClient();
-      const { data, error } = await client.auth.verifyOtp({
+      const { data, error } = await withRequestTimeout(client.auth.verifyOtp({
         phone: verificationId || fullPhoneNumber,
         token: otpString,
         type: 'sms',
-      });
-      console.log('Supabase verifyOtp response:', { data, error });
+      }), 20000);
       if (error) { console.error('OTP VERIFICATION ERROR:', error); throw error; }
+      await clearOtpAttempts(verificationId || fullPhoneNumber);
       if (!data?.user) { console.error('No Supabase user returned:', data); throw new Error('Could not create Supabase user.'); }
-      console.log('SUPABASE USER CREATED:', data.user.id);
-      console.log('Creating users profile...');
-
       await upsertRow('users', {
         id: data.user.id,
         firstName,
@@ -448,10 +446,7 @@ export default function SignupScreen() {
         isMockUser: false,
       });
 
-      console.log('USERS PROFILE CREATED');
-
       if (pinpointLocation) {
-        console.log('Creating PinPoint record...');
         await insertRow('pinpoints', {
           userId: data.user.id,
           label: 'Home',
@@ -462,19 +457,36 @@ export default function SignupScreen() {
           qrPayload: pinpointLocation.mapsUrl,
           createdAt: new Date().toISOString(),
         });
-        console.log('PINPOINT CREATED');
       }
 
-      console.log('SIGNUP COMPLETE');
-      Alert.alert('Account Created Successfully!', 'Your account has been created. Please login to continue.', [
+      await client.auth.signOut({ scope: 'local' });
+      const requiresApproval = selectedRole !== 'resident';
+      Alert.alert(
+        requiresApproval ? 'Account Submitted' : 'Account Created Successfully!',
+        requiresApproval
+          ? 'Your account was created with resident access. An administrator must approve the requested staff role before staff features become available.'
+          : 'Your account has been created. Please login to continue.', [
         { text: 'Go to Login', onPress: () => router.replace('/login') },
       ]);
     } catch (error) {
-      console.error('=================================');
       console.error('SIGNUP FAILED');
       console.error(error);
-      console.error('=================================');
-      Alert.alert('Signup Failed', getFriendlySupabaseError(error));
+      if (error?.message === 'OTP_ATTEMPTS_LOCKED') {
+        handleOtpBack();
+        Alert.alert('Too Many Attempts', `Try again in ${formatLockoutTime(error.lockedUntil)}.`);
+      } else if (isInvalidOtpError(error)) {
+        const state = await recordFailedOtpAttempt(verificationId || `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`);
+        setOtp(Array(OTP_LENGTH).fill(''));
+        if (state.locked) {
+          await getSupabaseClient().auth.signOut({ scope: 'local' });
+          handleOtpBack();
+          Alert.alert('Verification Locked', `Three incorrect codes were entered. Verification was cancelled; try again in ${formatLockoutTime(state.lockedUntil)}.`);
+        } else {
+          Alert.alert('Incorrect Code', `${state.remaining} attempt${state.remaining === 1 ? '' : 's'} remaining.`);
+        }
+      } else {
+        Alert.alert('Signup Failed', getFriendlySupabaseError(error));
+      }
     } finally {
       setLoading(false);
     }
