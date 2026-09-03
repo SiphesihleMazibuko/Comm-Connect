@@ -143,30 +143,20 @@ export const isMissingSchemaRelation = (error) => (
 // GET CURRENT USER
 export const getCurrentUser = async () => {
   try {
-    if (!(await refreshConnectivity())) {
-      offlineLog("getCurrentUser: offline, using cached Supabase session.");
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      return session?.user || null;
-    }
-
     const {
-      data: { user },
+      data: { session },
       error,
-    } = await supabase.auth.getUser();
-    if (error) throw error;
-    return user;
-  } catch (error) {
-    console.error("Error getting current user:", error);
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      return session?.user || null;
-    } catch {
+    } = await supabase.auth.getSession();
+
+    if (error) {
+      console.warn("Error getting current session:", error);
       return null;
     }
+
+    return session?.user || null;
+  } catch (error) {
+    console.warn("Error getting current user session:", error);
+    return null;
   }
 };
 
