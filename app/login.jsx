@@ -202,7 +202,8 @@ export default function LoginScreen() {
     <View
       style={{width: '100%', height: 430,backgroundColor: colors.primaryLight, borderTopLeftRadius: 45, borderTopRightRadius: 45,
         overflow: 'hidden',}}>
-      <Image source={require('../assets/login-top.png')} style={{width: '100%', height: '100%', resizeMode: 'cover',}} />
+     
+<Image source={isDark ? require('../assets/login-dark.png') : require('../assets/login-top.png')}style={{width: '100%',height: '100%', resizeMode: 'cover',}}/>
     </View>
     <View style={{backgroundColor: colors.background, marginTop: -30, borderTopLeftRadius: 38, borderTopRightRadius: 38,paddingHorizontal: 24,
         paddingTop: 30, paddingBottom: 30,}}>
