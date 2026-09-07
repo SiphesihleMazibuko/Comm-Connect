@@ -28,11 +28,35 @@ const isValidRemoteId = (value) => (
   `${value}`.trim().toLowerCase() !== 'undefined'
 );
 
-const getEmergencyContacts = (profile) => (
-  Array.isArray(profile?.permissions?.emergencyContacts)
-    ? profile.permissions.emergencyContacts.filter((contact) => contact?.phone?.trim())
-    : []
+const getEmergencyContacts = (profile, contacts = []) => (
+  (contacts.length > 0 ? contacts : profile?.permissions?.emergencyContacts || [])
+    .filter((contact) => contact?.phone?.trim())
 );
+
+const getDisplayName = (profile) => {
+  const name = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ').trim();
+  return name || profile?.email || profile?.phoneNumber || 'CPF Member';
+};
+
+const getWardCpfContacts = async (profile) => {
+  if (!profile?.ward_id) return [];
+
+  const wardUsers = await getRows('users', { filters: { ward_id: profile.ward_id } });
+
+  return (wardUsers || [])
+    .filter((wardUser) => (
+      wardUser?.id !== profile.id &&
+      ['community_protection_service', 'emergency_responder'].includes(wardUser?.role) &&
+      wardUser?.phoneNumber?.trim()
+    ))
+    .map((wardUser) => ({
+      id: wardUser.id,
+      name: getDisplayName(wardUser),
+      relationship: 'Ward CPF member',
+      phone: wardUser.phoneNumber,
+      source: 'ward_cpf',
+    }));
+};
 
 export default function PinPointScreen() {
   const { colors, isDark } = useTheme();
@@ -292,16 +316,25 @@ export default function PinPointScreen() {
 
     try {
       const latestProfile = await getUserProfile(user.id);
-      const emergencyContacts = getEmergencyContacts(latestProfile);
 
-      if (emergencyContacts.length === 0) {
-        Alert.alert('Emergency Contacts Needed', 'Add emergency contacts in Settings before using SOS.');
+      
+
+      const emergencyContactRows = await getRows('emergency_contacts', {
+        eq: [{ column: 'userId', value: user.id }],
+        order: [{ column: 'createdAt', ascending: true }],
+        allowMissingTable: true,
+      });
+
+      const emergencyContacts = getEmergencyContacts(latestProfile, emergencyContactRows);
+      const sosContacts = emergencyContacts.length > 0 ? emergencyContacts : await getWardCpfContacts(latestProfile);
+
+      if (sosContacts.length === 0) {
+        Alert.alert('SOS Contacts Unavailable', 'No emergency contacts or ward CPF members with phone numbers were found.');
         return;
       }
 
       const currentLocation = await getHighAccuracyLocation();
       const shareToken = makeShareToken();
-
       const userName = `${latestProfile?.firstName || ''} ${latestProfile?.lastName || ''}`.trim() || user.email || 'PinPoint user';
       const createdAt = new Date().toISOString();
 
@@ -313,11 +346,14 @@ export default function PinPointScreen() {
         userPhone: latestProfile?.phoneNumber || '',
         emergencyType: 'sos',
         description: 'SOS live location alert',
-        contactDetails: emergencyContacts.map((contact) => contact.phone).filter(Boolean).join(', '),
+        contactDetails: sosContacts.map((contact) =>contact.phone).filter(Boolean).join(', '),
         status: 'active',
+        ward_id: latestProfile?.ward_id || null,
+        suburb_id: latestProfile?.suburb_id || null,
         location: {
           type: 'sos',
-          emergencyContacts,
+          emergencyContacts: sosContacts,
+          recipientSource: emergencyContacts.length > 0 ? 'emergency_contacts' : 'ward_cpf',
           currentLocation,
           locationHistory: sosLocationHistoryRef.current,
           shareToken,
@@ -334,7 +370,13 @@ export default function PinPointScreen() {
 
       const trackingUrl = Linking.createURL(`/sos/${alertId}`, { queryParams: { token: shareToken } });
 
-      sosLocationMetaRef.current = { type: 'sos', emergencyContacts, shareToken, trackingUrl };
+      sosLocationMetaRef.current = {
+        type: 'sos',
+        emergencyContacts: sosContacts,
+        recipientSource: emergencyContacts.length > 0 ? 'emergency_contacts' : 'ward_cpf',
+        shareToken,
+        trackingUrl,
+      };
 
       await updateRow('emergencyRequests', alertId, {
         location: {
@@ -346,7 +388,7 @@ export default function PinPointScreen() {
       });
 
       const smsOpened = await notifyEmergencyContactsBySms({
-        contacts: emergencyContacts,
+        contacts: sosContacts,
         alert: { ...alert, id: alertId, userName },
         trackingUrl,
       });
