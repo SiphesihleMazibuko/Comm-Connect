@@ -9,7 +9,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ScreenHeader from '../../components/ScreenHeader';
 import { deleteRow, getCurrentUser, getRows, getUserProfile, insertRow, updateRow } from '../../config/supabase';
-import { notifyEmergencyContactsBySms, showLocalSosNotification } from '../../config/notifications';
+import { notifyEmergencyContactsByWhatsApp, showLocalSosNotification } from '../../config/notifications';
 import { useTheme } from '../context/ThemeContext';
 
 const HOLD_SECONDS = 5;
@@ -18,6 +18,36 @@ const SOS_LOCATION_INTERVAL_MS = 10000;
 const makeShareToken = () => {
   if (global.crypto?.randomUUID) return global.crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+};
+
+const getPublicTrackingBaseUrl = () => {
+  const configuredUrl = (
+    process.env.EXPO_PUBLIC_TRACKING_BASE_URL ||
+    process.env.EXPO_PUBLIC_APP_URL ||
+    process.env.EXPO_PUBLIC_SITE_URL ||
+    ''
+  ).trim();
+
+  if (/^https?:\/\//i.test(configuredUrl)) {
+    return configuredUrl.replace(/\/+$/, '');
+  }
+
+  if (typeof window !== 'undefined' && /^https?:\/\//i.test(window.location?.origin || '')) {
+    return window.location.origin.replace(/\/+$/, '');
+  }
+
+  return null;
+};
+
+const buildSosTrackingUrl = ({ alertId, shareToken }) => {
+  const publicBaseUrl = getPublicTrackingBaseUrl();
+  const query = `token=${encodeURIComponent(shareToken)}`;
+
+  if (publicBaseUrl) {
+    return `${publicBaseUrl}/sos/${encodeURIComponent(alertId)}?${query}`;
+  }
+
+  return Linking.createURL(`/sos/${alertId}`, { queryParams: { token: shareToken } });
 };
 
 const isValidRemoteId = (value) => (
@@ -192,7 +222,7 @@ export default function PinPointScreen() {
     }
   };
 
-  const loadSavedAddresses = async (currentUser = user) => {
+  async function loadSavedAddresses(currentUser = user) {
     if (!currentUser?.id) return;
 
     try {
@@ -201,7 +231,7 @@ export default function PinPointScreen() {
     } catch (error) {
       console.error('Error loading addresses:', error);
     }
-  };
+  }
 
   const shareAddress = async (address) => {
     try {
@@ -257,7 +287,7 @@ export default function PinPointScreen() {
     };
   };
 
-  const clearSosHold = () => {
+  function clearSosHold() {
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
     if (holdVibrationRef.current) clearInterval(holdVibrationRef.current);
@@ -268,12 +298,12 @@ export default function PinPointScreen() {
 
     Vibration.cancel();
     setHoldCountdown(HOLD_SECONDS);
-  };
+  }
 
-  const clearSosLocationUpdates = () => {
+  function clearSosLocationUpdates() {
     if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
     locationIntervalRef.current = null;
-  };
+  }
 
   const updateSosLocation = async () => {
     const alertId = sosAlertIdRef.current;
@@ -367,7 +397,7 @@ export default function PinPointScreen() {
         throw new Error('SOS request was created without a valid remote ID. Please try again when your connection is stable.');
       }
 
-      const trackingUrl = Linking.createURL(`/sos/${alertId}`, { queryParams: { token: shareToken } });
+      const trackingUrl = buildSosTrackingUrl({ alertId, shareToken });
 
       sosLocationMetaRef.current = {
         type: 'sos',
@@ -386,10 +416,11 @@ export default function PinPointScreen() {
         },
       });
 
-      const smsOpened = await notifyEmergencyContactsBySms({
+      const whatsappOpened = await notifyEmergencyContactsByWhatsApp({
         contacts: sosContacts,
         alert: { ...alert, id: alertId, userName },
         trackingUrl,
+        mapUrl: currentLocation.mapsUrl,
       });
 
       await showLocalSosNotification(alertId);
@@ -402,9 +433,9 @@ export default function PinPointScreen() {
 
       Alert.alert(
         'SOS Active',
-        smsOpened
-          ? 'Your SMS app opened with the emergency message. Your live location is updating every 10 seconds.'
-          : 'Your live location is updating every 10 seconds, but no SMS app or contact phone number was available.'
+        whatsappOpened
+          ? 'WhatsApp opened with the emergency message. Send it there while your live location updates every 10 seconds.'
+          : 'Your live location is updating every 10 seconds, but WhatsApp or a contact phone number was not available.'
       );
     } catch (error) {
       console.error('[SOS] Failed to activate:', error);
@@ -448,7 +479,11 @@ export default function PinPointScreen() {
 
     try {
       clearSosLocationUpdates();
-      await updateRow('emergencyRequests', alertId, { status: 'cancelled', completedAt: new Date().toISOString() });
+      await updateRow('emergencyRequests', alertId, {
+        status: 'cancelled',
+        completedAt: new Date().toISOString(),
+        responderNotes: 'SOS tracking stopped by resident',
+      });
 
       setSosActive(false);
       setSosAlertId(null);

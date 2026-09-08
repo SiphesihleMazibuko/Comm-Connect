@@ -43,6 +43,8 @@ export default function PendingReportsScreen() {
   const [userProfile, setUserProfile] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [dispatchModalVisible, setDispatchModalVisible] = useState(false);
+  const [crimeModalVisible, setCrimeModalVisible] = useState(false);
+  const [selectedCrimeCategory, setSelectedCrimeCategory] = useState(null);
   const [reportToApprove, setReportToApprove] = useState(null);
   const [selectedServices, setSelectedServices] = useState([]);
   const [dispatching, setDispatching] = useState(false);
@@ -124,12 +126,35 @@ export default function PendingReportsScreen() {
     }
   };
 
-  const crimeMatrix = CRIME_CATEGORIES.map((category) => ({
-    ...category,
-    count: wardReports.filter((report) => report.reportType === 'crime' && getReportCrimeCategory(report) === category.id).length,
-  }));
+  const getCrimeReportsForCategory = (categoryId) => (
+    wardReports.filter((report) => report.reportType === 'crime' && getReportCrimeCategory(report) === categoryId)
+  );
+
+  const crimeMatrix = CRIME_CATEGORIES.map((category) => {
+    const categoryReports = getCrimeReportsForCategory(category.id);
+    return {
+      ...category,
+      count: categoryReports.length,
+      pendingCount: categoryReports.filter((report) => report.status === 'pending_review').length,
+      approvedCount: categoryReports.filter((report) => report.status === 'approved').length,
+      rejectedCount: categoryReports.filter((report) => report.status === 'rejected').length,
+      latestReportAt: categoryReports[0]?.createdAt || null,
+    };
+  });
 
   const totalCrimeReports = crimeMatrix.reduce((total, category) => total + category.count, 0);
+  const selectedCrimeReports = selectedCrimeCategory ? getCrimeReportsForCategory(selectedCrimeCategory.id) : [];
+
+  const openCrimeCategory = (category) => {
+    setSelectedCrimeCategory(category);
+    setCrimeModalVisible(true);
+  };
+
+  const openReportFromCrimeMatrix = (report) => {
+    setCrimeModalVisible(false);
+    setSelectedReport(report);
+    setDetailModalVisible(true);
+  };
 
   const openDispatchModal = (report) => {
     setReportToApprove(report);
@@ -334,13 +359,24 @@ export default function PendingReportsScreen() {
               </View>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                 {crimeMatrix.map((category) => (
-                  <View key={category.id} style={{ width: '48.5%', backgroundColor: colors.background, borderRadius: 15, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: colors.border }}>
+                  <TouchableOpacity key={category.id} onPress={() => openCrimeCategory(category)} activeOpacity={0.86} style={{ width: '48.5%', backgroundColor: colors.background, borderRadius: 15, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: category.count > 0 ? colors.accent + '55' : colors.border }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <Ionicons name={category.icon} size={16} color={colors.accent} />
                       <Text numberOfLines={1} style={{ flex: 1, color: colors.text, fontSize: 11, fontWeight: '700', marginLeft: 7 }}>{category.label}</Text>
+                      <Ionicons name="chevron-forward" size={14} color={colors.textLight} />
                     </View>
-                    <Text style={{ color: colors.text, fontSize: 23, fontWeight: '900', marginTop: 8 }}>{category.count}</Text>
-                  </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 8 }}>
+                      <Text style={{ color: colors.text, fontSize: 23, fontWeight: '900' }}>{category.count}</Text>
+                      {category.pendingCount > 0 && (
+                        <View style={{ backgroundColor: colors.warningLight || colors.accentLight, borderRadius: 9, paddingHorizontal: 7, paddingVertical: 3 }}>
+                          <Text style={{ color: colors.warning || colors.accent, fontSize: 9, fontWeight: '900' }}>{category.pendingCount} PENDING</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text numberOfLines={1} style={{ color: colors.textLight, fontSize: 10, marginTop: 5 }}>
+                      {category.latestReportAt ? `Latest ${new Date(category.latestReportAt).toLocaleDateString()}` : 'No reports yet'}
+                    </Text>
+                  </TouchableOpacity>
                 ))}
               </View>
             </View>
@@ -447,6 +483,99 @@ export default function PendingReportsScreen() {
                       <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '900' }}>Reject Report</Text>
                     </TouchableOpacity>
                   </View>
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={crimeModalVisible} animationType="slide" transparent onRequestClose={() => setCrimeModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: colors.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30, maxHeight: '88%', paddingTop: 10, borderTopWidth: 1, borderColor: colors.border }}>
+            <View style={{ width: 42, height: 4, borderRadius: 4, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 8 }} />
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 22, paddingBottom: 34 }}>
+              {selectedCrimeCategory && (
+                <>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+                    <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: colors.accentLight, justifyContent: 'center', alignItems: 'center' }}>
+                      <Ionicons name={selectedCrimeCategory.icon} size={23} color={colors.accent} />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={{ color: colors.textLight, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 }}>CRIME MATRIX</Text>
+                      <Text style={{ color: colors.text, fontSize: 22, fontWeight: '900', marginTop: 3 }}>{selectedCrimeCategory.label}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setCrimeModalVisible(false)} style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border }}>
+                      <Ionicons name="close" size={22} color={colors.textLight} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', gap: 9, marginBottom: 18 }}>
+                    {[
+                      { label: 'Total', value: selectedCrimeCategory.count, color: colors.accent },
+                      { label: 'Pending', value: selectedCrimeCategory.pendingCount, color: colors.warning || colors.accent },
+                      { label: 'Approved', value: selectedCrimeCategory.approvedCount, color: colors.success },
+                      { label: 'Rejected', value: selectedCrimeCategory.rejectedCount, color: colors.error },
+                    ].map((stat) => (
+                      <View key={stat.label} style={{ flex: 1, backgroundColor: colors.background, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: colors.border, minHeight: 72 }}>
+                        <Text style={{ color: stat.color, fontSize: 20, fontWeight: '900', textAlign: 'center' }}>{stat.value}</Text>
+                        <Text style={{ color: colors.textLight, fontSize: 9, fontWeight: '800', textAlign: 'center', marginTop: 4 }}>{stat.label.toUpperCase()}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  <View style={{ backgroundColor: colors.background, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: colors.border, marginBottom: 18 }}>
+                    <Text style={{ color: colors.textLight, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 }}>SUMMARY</Text>
+                    <Text style={{ color: colors.text, fontSize: 14, lineHeight: 21, marginTop: 7 }}>
+                      {selectedCrimeCategory.count === 0
+                        ? `No ${selectedCrimeCategory.label.toLowerCase()} reports have been submitted in this ward yet.`
+                        : `${selectedCrimeCategory.label} has ${selectedCrimeCategory.count} report${selectedCrimeCategory.count === 1 ? '' : 's'} in this ward, with ${selectedCrimeCategory.pendingCount} still waiting for review.`}
+                    </Text>
+                  </View>
+
+                  <Text style={{ color: colors.text, fontSize: 17, fontWeight: '900', marginBottom: 12 }}>Reports</Text>
+                  {selectedCrimeReports.length === 0 ? (
+                    <View style={{ backgroundColor: colors.background, borderRadius: 18, padding: 28, alignItems: 'center', borderWidth: 1, borderColor: colors.border }}>
+                      <Ionicons name="folder-open-outline" size={38} color={colors.textLight} />
+                      <Text style={{ color: colors.text, fontWeight: '800', marginTop: 10 }}>No reports in this category</Text>
+                    </View>
+                  ) : (
+                    selectedCrimeReports
+                      .slice()
+                      .sort((first, second) => new Date(second.createdAt || 0) - new Date(first.createdAt || 0))
+                      .map((report) => {
+                        const isPending = report.status === 'pending_review';
+                        const photos = getReportPhotos(report);
+                        return (
+                          <TouchableOpacity key={report.id} onPress={() => openReportFromCrimeMatrix(report)} activeOpacity={0.86} style={{ backgroundColor: colors.background, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: isPending ? colors.accent + '55' : colors.border, marginBottom: 10 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 9 }}>
+                              <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 9, backgroundColor: isPending ? colors.accentLight : colors.surfaceRaised }}>
+                                <Text style={{ color: isPending ? colors.accent : colors.textLight, fontSize: 9, fontWeight: '900' }}>{(report.status || 'unknown').replace('_', ' ').toUpperCase()}</Text>
+                              </View>
+                              <Text style={{ flex: 1, color: colors.textLight, fontSize: 11, textAlign: 'right' }} numberOfLines={1}>
+                                {report.createdAt ? new Date(report.createdAt).toLocaleString() : 'Just now'}
+                              </Text>
+                            </View>
+                            <Text style={{ color: colors.text, fontSize: 14, lineHeight: 21, fontWeight: '600' }} numberOfLines={3}>
+                              {report.description || 'No description provided.'}
+                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 11, gap: 12 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 }}>
+                                <Ionicons name="location" size={14} color={colors.textLight} />
+                                <Text style={{ color: colors.textLight, fontSize: 11 }} numberOfLines={1}>
+                                  {report.location?.latitude ? `${report.location.latitude}, ${report.location.longitude}` : 'No location'}
+                                </Text>
+                              </View>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                                <Ionicons name="image" size={14} color={colors.textLight} />
+                                <Text style={{ color: colors.textLight, fontSize: 11 }}>{photos.length}</Text>
+                              </View>
+                              <Ionicons name="chevron-forward" size={16} color={colors.textLight} />
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })
+                  )}
                 </>
               )}
             </ScrollView>

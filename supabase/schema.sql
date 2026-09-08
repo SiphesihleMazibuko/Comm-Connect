@@ -85,6 +85,38 @@ to authenticated
 using (id = auth.uid())
 with check (id = auth.uid());
 
+create or replace function public.prevent_self_provisioned_responder_accounts()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+begin
+  if current_user in ('postgres', 'service_role', 'supabase_admin') then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' and new.role in ('community_protection_service', 'emergency_responder') then
+    raise exception 'CPF accounts must be provisioned by an administrator';
+  end if;
+
+  if tg_op = 'UPDATE'
+    and new.role is distinct from old.role
+    and new.role in ('community_protection_service', 'emergency_responder')
+  then
+    raise exception 'CPF accounts must be provisioned by an administrator';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.prevent_self_provisioned_responder_accounts() from public;
+
+drop trigger if exists prevent_self_provisioned_responder_accounts on public.users;
+create trigger prevent_self_provisioned_responder_accounts
+before insert or update on public.users
+for each row execute function public.prevent_self_provisioned_responder_accounts();
+
 create table if not exists public.pinpoints (
   id uuid primary key default gen_random_uuid(),
   "userId" uuid not null references auth.users(id) on delete cascade,

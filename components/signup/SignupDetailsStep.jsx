@@ -44,15 +44,23 @@ export default function SignupDetailsStep({
       <View style={{ marginBottom: 24 }}>
         <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 12 }}>Select Account Type</Text>
         {roles.map((role) => (
-          <TouchableOpacity key={role.id} onPress={() => setSelectedRole(role.id)} style={{
+          <TouchableOpacity key={role.id} disabled={role.disabled} onPress={() => setSelectedRole(role.id)} style={{
             backgroundColor: selectedRole === role.id ? colors.accent : colors.surface,
             borderRadius: 12,
             padding: 16,
             marginBottom: 12,
             borderWidth: 1,
             borderColor: selectedRole === role.id ? colors.accent : colors.border,
+            opacity: role.disabled ? 0.62 : 1,
           }}>
-            <Text style={{ fontSize: 16, fontWeight: 'bold', color: selectedRole === role.id ? colors.textInverse : colors.text }}>{role.title}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={{ flex: 1, fontSize: 16, fontWeight: 'bold', color: selectedRole === role.id ? colors.textInverse : colors.text }}>{role.title}</Text>
+              {role.disabled && (
+                <View style={{ backgroundColor: colors.surfaceLight || colors.background, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: colors.border }}>
+                  <Text style={{ color: colors.textLight, fontSize: 9, fontWeight: '800' }}>ADMIN</Text>
+                </View>
+              )}
+            </View>
             <Text style={{ fontSize: 13, marginTop: 4, color: selectedRole === role.id ? colors.textInverse : colors.textLight }}>{role.description}</Text>
           </TouchableOpacity>
         ))}

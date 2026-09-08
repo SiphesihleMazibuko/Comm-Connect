@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Linking, Modal, ScrollView, Text, View, Vibration } from 'react-native';
 import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -71,6 +71,42 @@ const getSosMapsUrl = (alert) => {
   return null;
 };
 
+const isActiveSosAlert = (alert) => alert?.status === 'active';
+
+const getResponderName = (profile, currentUser) => {
+  const name = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ').trim();
+  return name || profile?.email || currentUser?.email || profile?.phoneNumber || 'CPF Responder';
+};
+
+const getSosStatusLabel = (status) => {
+  switch (status) {
+    case 'active': return 'LIVE SOS';
+    case 'cancelled': return 'STOPPED BY RESIDENT';
+    case 'stopped_by_responder': return 'STOPPED BY CPF';
+    case 'resolved': return 'RESOLVED';
+    default: return `${status || 'unknown'}`.replace(/_/g, ' ').toUpperCase();
+  }
+};
+
+const getSosStatusColors = (status, colors) => {
+  if (status === 'active') {
+    return {
+      background: colors.errorLight || `${colors.error}18`,
+      border: `${colors.error}55`,
+      icon: colors.error,
+      text: colors.error,
+    };
+  }
+
+  const stoppedColor = colors.success || colors.primary;
+  return {
+    background: colors.successLight || `${stoppedColor}18`,
+    border: `${stoppedColor}55`,
+    icon: stoppedColor,
+    text: stoppedColor,
+  };
+};
+
 export default function ResponderDashboardScreen() {
   const { colors } = useTheme();
   const [dispatches, setDispatches] = useState([]);
@@ -83,13 +119,71 @@ export default function ResponderDashboardScreen() {
   const [detailVisible, setDetailVisible] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
   const [user, setUser] = useState(null);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [pulseAnim] = useState(() => new Animated.Value(1));
+  const [fadeAnim] = useState(() => new Animated.Value(0));
+
+  async function loadResponderProfile() {
+    try {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      const data = currentUser ? await getUserProfile(currentUser.id) : null;
+      setProfile(data);
+      setResponderServiceType('community_protection_service');
+    } catch (error) {
+      console.error('Failed to load responder profile:', error);
+      setResponderServiceType('community_protection_service');
+    }
+  }
+
+  function subscribeToDispatches(serviceType, userProfile) {
+    const loadDispatches = async () => {
+      try {
+        const filters = { serviceType };
+        if (userProfile?.ward_id) filters.ward_id = userProfile.ward_id;
+        const data = await getRows('emergency_dispatches', {
+          filters,
+          neq: [{ column: 'status', value: 'resolved' }],
+          order: [{ column: 'status', ascending: true }, { column: 'dispatchedAt', ascending: false }]
+        });
+        const newPending = data.filter((dispatch) => dispatch.status === 'pending' && !dispatch.acknowledged);
+        if (newPending.length > 0) Vibration.vibrate([0, 400, 200, 400]);
+        setDispatches(data);
+      } catch (error) {
+        console.error('Dispatch listener error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadDispatches();
+    return subscribeToTable('emergency_dispatches', loadDispatches);
+  }
+
+  function subscribeToSosAlerts(userProfile) {
+    const loadSosAlerts = async () => {
+      try {
+        const filters = { emergencyType: 'sos' };
+        if (userProfile?.ward_id) filters.ward_id = userProfile.ward_id;
+        const data = await getRows('emergencyRequests', {
+          filters,
+          order: [{ column: 'createdAt', ascending: false }],
+        });
+        setSosAlerts((data || []).filter((alert) => (
+          ['active', 'cancelled', 'stopped_by_responder'].includes(alert.status)
+        )));
+      } catch (error) {
+        console.error('SOS tracking listener error:', error);
+      }
+    };
+
+    loadSosAlerts();
+    return subscribeToTable('emergencyRequests', loadSosAlerts);
+  }
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
-    loadResponderProfile();
-  }, []);
+    const loadTimer = setTimeout(loadResponderProfile, 0);
+    return () => clearTimeout(loadTimer);
+  }, [fadeAnim]);
 
   useEffect(() => {
     if (!responderServiceType || !profile) return;
@@ -116,61 +210,6 @@ export default function ResponderDashboardScreen() {
     pulseAnim.setValue(1);
   }, [dispatches, pulseAnim]);
 
-  const loadResponderProfile = async () => {
-    try {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-      const data = currentUser ? await getUserProfile(currentUser.id) : null;
-      setProfile(data);
-      setResponderServiceType('community_protection_service');
-    } catch (error) {
-      console.error('Failed to load responder profile:', error);
-      setResponderServiceType('community_protection_service');
-    }
-  };
-
-  const subscribeToDispatches = (serviceType, userProfile) => {
-    const loadDispatches = async () => {
-      try {
-        const filters = { serviceType };
-        if (userProfile?.ward_id) filters.ward_id = userProfile.ward_id;
-        const data = await getRows('emergency_dispatches', {
-          filters,
-          neq: [{ column: 'status', value: 'resolved' }],
-          order: [{ column: 'status', ascending: true }, { column: 'dispatchedAt', ascending: false }]
-        });
-        const newPending = data.filter((dispatch) => dispatch.status === 'pending' && !dispatch.acknowledged);
-        if (newPending.length > 0) Vibration.vibrate([0, 400, 200, 400]);
-        setDispatches(data);
-      } catch (error) {
-        console.error('Dispatch listener error:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadDispatches();
-    return subscribeToTable('emergency_dispatches', loadDispatches);
-  };
-
-  const subscribeToSosAlerts = (userProfile) => {
-    const loadSosAlerts = async () => {
-      try {
-        const filters = { emergencyType: 'sos', status: 'active' };
-        if (userProfile?.ward_id) filters.ward_id = userProfile.ward_id;
-        const data = await getRows('emergencyRequests', {
-          filters,
-          order: [{ column: 'createdAt', ascending: false }],
-        });
-        setSosAlerts(data || []);
-      } catch (error) {
-        console.error('SOS tracking listener error:', error);
-      }
-    };
-
-    loadSosAlerts();
-    return subscribeToTable('emergencyRequests', loadSosAlerts);
-  };
-
   const updateDispatchStatus = async (dispatchId, newStatus) => {
     setUpdatingId(dispatchId);
     try {
@@ -194,6 +233,47 @@ export default function ResponderDashboardScreen() {
     }
   };
 
+  const stopSosTracking = (alert) => {
+    if (!alert?.id || !isActiveSosAlert(alert)) return;
+
+    Alert.alert(
+      'Stop SOS Tracking',
+      `Stop live tracking for ${alert.userName || 'this resident'}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Stop Tracking',
+          style: 'destructive',
+          onPress: async () => {
+            const stoppedAt = new Date().toISOString();
+            const responderName = getResponderName(profile, user);
+            const changes = {
+              status: 'stopped_by_responder',
+              responderId: user?.id,
+              responderName,
+              respondedAt: alert.respondedAt || stoppedAt,
+              completedAt: stoppedAt,
+              responderNotes: `SOS tracking stopped by ${responderName}`,
+            };
+
+            setUpdatingId(alert.id);
+            try {
+              await updateRow('emergencyRequests', alert.id, changes);
+              setSosAlerts((previous) => previous.map((item) => (
+                item.id === alert.id ? { ...item, ...changes } : item
+              )));
+            } catch (error) {
+              console.error('Error stopping SOS tracking:', error);
+              Alert.alert('Stop Failed', 'Could not stop SOS tracking. Please try again.');
+            } finally {
+              setUpdatingId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const openDispatchDirections = (dispatch) => {
     const directionsUrl = getDirectionsUrl(dispatch);
     if (!directionsUrl) {
@@ -213,7 +293,8 @@ export default function ResponderDashboardScreen() {
 
   const serviceConfig = SERVICE_CONFIG[responderServiceType] || SERVICE_CONFIG.community_protection_service;
   const pendingCount = dispatches.filter((dispatch) => dispatch.status === 'pending').length;
-  const activeSosCount = sosAlerts.length;
+  const activeSosCount = sosAlerts.filter(isActiveSosAlert).length;
+  const stoppedSosCount = sosAlerts.filter((alert) => !isActiveSosAlert(alert)).length;
   const wardLabel = profile?.wardName || profile?.ward_name || profile?.permissions?.manualWardNumber || profile?.ward_number || profile?.ward_id;
 
   const getStatusColors = (status) => {
@@ -340,6 +421,10 @@ export default function ResponderDashboardScreen() {
     const mapsUrl = getSosMapsUrl(alert);
     const locationHistory = Array.isArray(sosLocation.locationHistory) ? sosLocation.locationHistory : [];
     const lastUpdated = sosLocation.lastLocationAt || currentLocation?.recordedAt || alert.createdAt;
+    const stoppedAt = alert.completedAt || alert.resolvedAt;
+    const active = isActiveSosAlert(alert);
+    const statusColors = getSosStatusColors(alert.status, colors);
+    const isUpdating = updatingId === alert.id;
     const hasLocation = Number.isFinite(Number(currentLocation?.latitude)) && Number.isFinite(Number(currentLocation?.longitude));
 
     return (
@@ -349,22 +434,22 @@ export default function ResponderDashboardScreen() {
         padding: 16,
         marginBottom: 13,
         borderWidth: 1,
-        borderColor: colors.error + '55',
+        borderColor: statusColors.border,
         borderLeftWidth: 4,
-        borderLeftColor: colors.error,
+        borderLeftColor: statusColors.text,
       }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, flex: 1 }}>
-            <View style={{ width: 34, height: 34, borderRadius: 12, backgroundColor: colors.errorLight || `${colors.error}20`, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="alert-circle" size={20} color={colors.error} />
+            <View style={{ width: 34, height: 34, borderRadius: 12, backgroundColor: statusColors.background, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name={active ? 'alert-circle' : 'checkmark-circle'} size={20} color={statusColors.icon} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ color: colors.text, fontWeight: '900', fontSize: 15 }} numberOfLines={1}>{alert.userName || 'PinPoint user'}</Text>
               {!!alert.userPhone && <Text style={{ color: colors.textLight, fontSize: 11, marginTop: 2 }} numberOfLines={1}>{alert.userPhone}</Text>}
             </View>
           </View>
-          <View style={{ backgroundColor: colors.errorLight || `${colors.error}18`, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 }}>
-            <Text style={{ color: colors.error, fontSize: 11, fontWeight: '900' }}>LIVE SOS</Text>
+          <View style={{ backgroundColor: statusColors.background, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 }}>
+            <Text style={{ color: statusColors.text, fontSize: 11, fontWeight: '900' }}>{getSosStatusLabel(alert.status)}</Text>
           </View>
         </View>
 
@@ -393,16 +478,29 @@ export default function ResponderDashboardScreen() {
 
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, gap: 10 }}>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.textLight, fontSize: 11, fontWeight: '700' }}>LAST UPDATE</Text>
-            <Text style={{ color: colors.text, fontSize: 12, marginTop: 3 }} numberOfLines={1}>{formatDateTime(lastUpdated)}</Text>
+            <Text style={{ color: colors.textLight, fontSize: 11, fontWeight: '700' }}>{active ? 'LAST UPDATE' : 'STOPPED AT'}</Text>
+            <Text style={{ color: colors.text, fontSize: 12, marginTop: 3 }} numberOfLines={1}>{formatDateTime(active ? lastUpdated : stoppedAt || lastUpdated)}</Text>
             <Text style={{ color: colors.textLight, fontSize: 11, marginTop: 3 }}>{locationHistory.length} tracked update{locationHistory.length === 1 ? '' : 's'}</Text>
+            {!active && (
+              <Text style={{ color: colors.textLight, fontSize: 11, marginTop: 3 }} numberOfLines={1}>
+                {alert.status === 'stopped_by_responder' ? `Stopped by ${alert.responderName || 'CPF responder'}` : 'Stopped by resident'}
+              </Text>
+            )}
           </View>
-          {mapsUrl && (
-            <TouchableOpacity onPress={() => Linking.openURL(mapsUrl)} style={{ backgroundColor: colors.primary, borderRadius: 13, paddingHorizontal: 13, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-              <Ionicons name="map" size={16} color="#001B0B" />
-              <Text style={{ color: '#001B0B', fontWeight: '900', fontSize: 12 }}>Open Map</Text>
-            </TouchableOpacity>
-          )}
+          <View style={{ gap: 8 }}>
+            {mapsUrl && (
+              <TouchableOpacity onPress={() => Linking.openURL(mapsUrl)} style={{ backgroundColor: colors.primary, borderRadius: 13, paddingHorizontal: 13, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                <Ionicons name="map" size={16} color="#001B0B" />
+                <Text style={{ color: '#001B0B', fontWeight: '900', fontSize: 12 }}>Open Map</Text>
+              </TouchableOpacity>
+            )}
+            {active && (
+              <TouchableOpacity onPress={() => stopSosTracking(alert)} disabled={isUpdating} style={{ backgroundColor: colors.error, borderRadius: 13, paddingHorizontal: 13, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, opacity: isUpdating ? 0.65 : 1 }}>
+                {isUpdating ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="stop-circle" size={16} color="#FFFFFF" />}
+                <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 12 }}>Stop</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     );
@@ -453,7 +551,7 @@ export default function ResponderDashboardScreen() {
             <Text style={{ fontSize: 13, color: colors.textLighter || colors.textLight, marginTop: 8 }}>
               {dispatches.length === 0 && activeSosCount === 0
                 ? 'No active incidents'
-                : `${dispatches.length} dispatches · ${pendingCount} new · ${activeSosCount} live SOS`}
+                : `${dispatches.length} dispatches - ${pendingCount} new - ${activeSosCount} live SOS`}
             </Text>
             <View style={{ position: 'absolute', right: 24, top: 42, alignItems: 'center' }}>
               <View style={{
@@ -495,7 +593,7 @@ export default function ResponderDashboardScreen() {
             <View style={{ flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 14, padding: 4, borderWidth: 1, borderColor: colors.border, marginBottom: 18 }}>
               {[
                 { id: 'dispatches', label: 'Dispatches', count: dispatches.length, icon: 'list' },
-                { id: 'sos', label: 'SOS Tracking', count: activeSosCount, icon: 'radio' },
+                { id: 'sos', label: 'SOS Tracking', count: sosAlerts.length, icon: 'radio' },
               ].map((tab) => {
                 const selected = activeTab === tab.id;
                 return (
@@ -555,16 +653,18 @@ export default function ResponderDashboardScreen() {
                 }}>
                   <Ionicons name="shield-checkmark-outline" size={50} color={colors.error} />
                 </View>
-                <Text style={{ fontSize: 21, fontWeight: '900', color: colors.text, marginTop: 20 }}>No Live SOS</Text>
+                <Text style={{ fontSize: 21, fontWeight: '900', color: colors.text, marginTop: 20 }}>No SOS Tracking</Text>
                 <Text style={{ fontSize: 14, color: colors.textLight, marginTop: 8, textAlign: 'center', lineHeight: 21, maxWidth: 310 }}>
-                  Active SOS triggers in your ward will appear here with their latest live location.
+                  SOS triggers in your ward will appear here with their latest tracking status.
                 </Text>
               </View>
             ) : (
               <>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
                   <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: colors.error, marginRight: 8 }} />
-                  <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textLight, textTransform: 'uppercase', letterSpacing: 1 }}>Live SOS Tracking</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textLight, textTransform: 'uppercase', letterSpacing: 1 }}>
+                    {activeSosCount} Live SOS - {stoppedSosCount} Stopped
+                  </Text>
                 </View>
                 {sosAlerts.map((alert) => <SosTrackingCard key={alert.id} alert={alert} />)}
               </>

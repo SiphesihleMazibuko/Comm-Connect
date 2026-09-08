@@ -152,7 +152,7 @@ export default function SettingsScreen() {
     const relationship = contactDraft.relationship.trim();
     const phone = normalizePhoneNumber(selectedCountry.code, contactDraft.phone);
     if (!name) { Alert.alert('Missing Name', 'Please enter the contact name.'); return; }
-    if (!contactDraft.phone.trim()) { Alert.alert('Missing Phone Number', 'Please enter the phone number that should receive the SOS SMS.'); return; }
+    if (!contactDraft.phone.trim()) { Alert.alert('Missing Phone Number', 'Please enter the phone number that should receive the SOS WhatsApp message.'); return; }
     setSavingContact(true);
     try {
       const createdContact = await insertRow('emergency_contacts', {

@@ -575,6 +575,9 @@ export const getFriendlySupabaseError = (error) => {
   if (message.includes("Invalid OTP")) {
     return "Invalid verification code. Please try again.";
   }
+  if (message.includes("Privileged accounts must be provisioned by an administrator")) {
+    return "This account type is currently blocked by the database admin rule. CPF accounts must be created by an administrator.";
+  }
 
   return message;
 };

@@ -14,6 +14,8 @@ import { buildOpenStreetMapAddressLabel, reverseGeocodeWithOpenStreetMap } from 
 import colors from '../Utils/colors';
 
 const OTP_LENGTH = 6;
+const SELF_SIGNUP_ROLES = ['resident', 'community_leader'];
+const PRIVILEGED_ROLE_MESSAGE = 'CPF accounts must be created by an administrator. Please sign up as a resident or community leader, or contact your community administrator.';
 
 const normalizeLocationText = (value = '') => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -323,11 +325,15 @@ export default function SignupScreen() {
   const roles = [
     { id: 'resident', title: 'Resident', description: 'Report incidents and request assistance' },
     { id: 'community_leader', title: 'Community Leader', description: 'Manage community alerts and review reports' },
-    { id: 'community_protection_service', title: 'Community Protection Services', description: 'Receive ward incidents and coordinate on-duty protection members' }
+    { id: 'community_protection_service', title: 'Community Protection Services', description: 'Administrator-provisioned account', disabled: true }
   ];
 
   const handleSendOTP = async () => {
     if (!selectedRole) { Alert.alert('Error', 'Please select an account type'); return; }
+    if (!SELF_SIGNUP_ROLES.includes(selectedRole)) {
+      Alert.alert('Administrator Required', PRIVILEGED_ROLE_MESSAGE);
+      return;
+    }
     if (!firstName || !lastName || !email || !phoneNumber || !idNumber) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
@@ -392,6 +398,12 @@ export default function SignupScreen() {
       Alert.alert('Incomplete OTP', 'Please enter the 6-digit verification code.');
       return;
     }
+    if (!SELF_SIGNUP_ROLES.includes(selectedRole)) {
+      Alert.alert('Administrator Required', PRIVILEGED_ROLE_MESSAGE);
+      setStep('details');
+      setOtp(Array(OTP_LENGTH).fill(''));
+      return;
+    }
     setLoading(true);
     try {
       const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
@@ -419,9 +431,9 @@ export default function SignupScreen() {
         location: location || pinpointLocation?.digitalAddress || null,
         role: selectedRole,
         organizationName: selectedRole === 'community_leader' ? organizationName : null,
-        responderType: selectedRole === 'community_protection_service' ? 'community_protection_service' : null,
-        serviceType: selectedRole === 'community_protection_service' ? 'community_protection_service' : null,
-        wardName: selectedRole === 'community_protection_service' ? cpsWardName.trim() : null,
+        responderType: null,
+        serviceType: null,
+        wardName: null,
         province_id: selectedProvince?.id || null,
         city_id: selectedCity?.id || null,
         suburb_id: selectedSuburb?.id || null,
@@ -440,8 +452,8 @@ export default function SignupScreen() {
           canReportIncident: true,
           canRequestEmergency: true,
           canReviewReports: selectedRole === 'community_leader',
-          canRespondToEmergency: selectedRole === 'community_protection_service',
-          canClockInForDuty: selectedRole === 'community_protection_service',
+          canRespondToEmergency: false,
+          canClockInForDuty: false,
           canSendCommunityAlerts: selectedRole === 'community_leader',
         },
         createdAt: new Date().toISOString(),

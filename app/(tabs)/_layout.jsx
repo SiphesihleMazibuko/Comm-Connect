@@ -195,16 +195,16 @@ export default function TabLayout() {
   // ============================================================
 
   const createTabIcon = (name) => {
-    const TabIcon = (props) => (
-      <GlassTabIcon
-        name={name}
-        {...props}
-        colors={colors}
-        isDark={isDark}
-      />
-    );
-
-    TabIcon.displayName = `TabIcon(${name})`;
+    function TabIcon(props) {
+      return (
+        <GlassTabIcon
+          name={name}
+          {...props}
+          colors={colors}
+          isDark={isDark}
+        />
+      );
+    }
 
     return TabIcon;
   };
@@ -226,9 +226,6 @@ export default function TabLayout() {
 
   const approvalsIcon =
     createTabIcon('checkmark-done-circle');
-
-  const auditLogsIcon =
-    createTabIcon('receipt');
 
   const dutyIcon =
     createTabIcon('people-circle');
@@ -474,29 +471,12 @@ export default function TabLayout() {
         }}
       />
 
-      {/* ========================================================
-          COMMUNITY LEADER AUDIT LOGS
-      ======================================================== */}
-
       <Tabs.Screen
         name="auditlogs"
         options={{
-          title: 'Audit',
-
-          href:
-            isLeader
-              ? undefined
-              : null,
-
-          tabBarIcon:
-            auditLogsIcon,
+          href: null,
         }}
       />
-
-      {/* ========================================================
-          SETTINGS
-          Visible to everybody
-      ======================================================== */}
 
       <Tabs.Screen
         name="settings"
