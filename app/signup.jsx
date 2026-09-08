@@ -8,10 +8,19 @@ import SignupDetailsStep from '../components/signup/SignupDetailsStep';
 import SignupHeader from '../components/signup/SignupHeader';
 import SignupOtpStep from '../components/signup/SignupOtpStep';
 
-import { getFriendlySupabaseError, getSupabaseClient, insertRow, upsertRow } from '../config/supabase';
+import {
+  getFriendlySupabaseError,
+  getSupabaseClient,
+  insertRow,
+  upsertRow,
+  withRequestTimeout,
+} from '../config/supabase';
+
 import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode, searchCountryCodes } from '../Utils/countryCodes';
 import { buildOpenStreetMapAddressLabel, reverseGeocodeWithOpenStreetMap } from '../Utils/openStreetMapLocation';
-import colors from '../Utils/colors';
+import { clearOtpAttempts, formatLockoutTime, getOtpAttemptState, isInvalidOtpError, recordFailedOtpAttempt } from '../Utils/otpSecurity';
+
+import { useTheme } from './context/ThemeContext';
 
 const OTP_LENGTH = 6;
 const SELF_SIGNUP_ROLES = ['resident', 'community_leader'];
@@ -34,24 +43,32 @@ const createPinPointAddress = (latitude, longitude) => {
 };
 
 export default function SignupScreen() {
+  const { colors } = useTheme();
+
   const [step, setStep] = useState('details');
   const [selectedRole, setSelectedRole] = useState('');
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+
   const [countryCodes, setCountryCodes] = useState(FALLBACK_COUNTRY_CODES);
   const [selectedCountry, setSelectedCountry] = useState(getDefaultCountryCode());
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [loadingCountryCodes, setLoadingCountryCodes] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
+
   const countryCodesMountedRef = useRef(true);
+
   const [idNumber, setIdNumber] = useState('');
   const [location, setLocation] = useState('');
   const [pinpointLocation, setPinpointLocation] = useState(null);
+
   const [manualWardNumber, setManualWardNumber] = useState('');
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [locationLookupStatus, setLocationLookupStatus] = useState('');
+
   const [organizationName, setOrganizationName] = useState('');
   const [cpsWardName, setCpsWardName] = useState('');
 
@@ -69,20 +86,16 @@ export default function SignupScreen() {
 
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [locationErrors, setLocationErrors] = useState({});
+
   const filteredCountryCodes = searchCountryCodes(countryCodes, countrySearch);
 
-  useEffect(() => {
-    countryCodesMountedRef.current = true;
-    loadProvinces();
-    loadCountryCodes();
-    return () => { countryCodesMountedRef.current = false; };
-  }, []);
-
-  const loadCountryCodes = async () => {
+  async function loadCountryCodes() {
     setLoadingCountryCodes(true);
+
     try {
       const apiCountryCodes = await fetchCountryCodes();
       if (!countryCodesMountedRef.current || apiCountryCodes.length === 0) return;
+
       setCountryCodes(apiCountryCodes);
       setSelectedCountry((currentCountry) =>
         apiCountryCodes.find((country) => country.code === currentCountry.code && country.name === currentCountry.name) ||
@@ -93,7 +106,7 @@ export default function SignupScreen() {
     } finally {
       if (countryCodesMountedRef.current) setLoadingCountryCodes(false);
     }
-  };
+  }
 
   const toggleCountryPicker = () => {
     if (showCountryPicker) setCountrySearch('');
@@ -106,12 +119,13 @@ export default function SignupScreen() {
     setShowCountryPicker(false);
   };
 
-  const loadProvinces = async () => {
+  async function loadProvinces() {
     try {
       setLoadingLocations(true);
       const client = getSupabaseClient();
       const { data, error } = await client.from('provinces').select('*').order('name');
       if (error) throw error;
+
       console.log('Provinces loaded:', data?.length || 0);
       setProvinces(data || []);
     } catch (error) {
@@ -120,7 +134,20 @@ export default function SignupScreen() {
     } finally {
       setLoadingLocations(false);
     }
-  };
+  }
+
+  useEffect(() => {
+    countryCodesMountedRef.current = true;
+    const loadTimer = setTimeout(() => {
+      loadProvinces();
+      loadCountryCodes();
+    }, 0);
+
+    return () => {
+      countryCodesMountedRef.current = false;
+      clearTimeout(loadTimer);
+    };
+  }, []);
 
   const loadCities = async (provinceId) => {
     try {
@@ -128,6 +155,7 @@ export default function SignupScreen() {
       const client = getSupabaseClient();
       const { data, error } = await client.from('cities').select('*').eq('province_id', provinceId).order('name');
       if (error) throw error;
+
       console.log('Cities loaded:', data?.length || 0);
       setCities(data || []);
       setSelectedCity(null);
@@ -148,6 +176,7 @@ export default function SignupScreen() {
       const client = getSupabaseClient();
       const { data, error } = await client.from('suburbs').select('*').eq('city_id', cityId).order('name');
       if (error) throw error;
+
       console.log('Suburbs loaded:', data?.length || 0);
       setSuburbs(data || []);
       setSelectedSuburb(null);
@@ -167,6 +196,7 @@ export default function SignupScreen() {
       const client = getSupabaseClient();
       const { data, error } = await client.from('zones').select('*').eq('suburb_id', suburbId).order('name');
       if (error) throw error;
+
       console.log('Zones loaded:', data?.length || 0);
       setZones(data || []);
       setSelectedZone(null);
@@ -183,6 +213,7 @@ export default function SignupScreen() {
       const client = getSupabaseClient();
       const { data, error } = await client.from('wards').select('*').eq('suburb_id', suburbId).order('ward_number');
       if (error) throw error;
+
       console.log('Wards loaded:', data?.length || 0);
       setWards(data || []);
       setSelectedWard(null);
@@ -227,7 +258,7 @@ export default function SignupScreen() {
     loadWards(suburb.id);
   };
 
-  const handleZoneSelect = (zone) => { setSelectedZone(zone); };
+  const handleZoneSelect = (zone) => setSelectedZone(zone);
 
   const handleWardSelect = (ward) => {
     setSelectedWard(ward);
@@ -241,6 +272,7 @@ export default function SignupScreen() {
 
   const applyLocationHierarchyFromGps = async (osmLocation) => {
     const client = getSupabaseClient();
+
     let availableProvinces = provinces;
     if (availableProvinces.length === 0) {
       const { data: fetchedProvinces, error: provinceError } = await client.from('provinces').select('*').order('name');
@@ -248,59 +280,81 @@ export default function SignupScreen() {
       availableProvinces = fetchedProvinces || [];
       setProvinces(availableProvinces);
     }
+
     const province = findLocationMatch(availableProvinces, [osmLocation.province, osmLocation.district, osmLocation.cityTown]);
+
     if (!province) {
       setLocationLookupStatus('Location saved. Select or enter your ward number if you know it.');
       return;
     }
+
     setSelectedProvince(province);
+
     const { data: provinceCities, error: cityError } = await client.from('cities').select('*').eq('province_id', province.id).order('name');
     if (cityError) throw cityError;
+
     setCities(provinceCities || []);
+
     const city = findLocationMatch(provinceCities || [], [osmLocation.cityTown, osmLocation.district, osmLocation.suburb]);
+
     if (!city) {
       setLocationLookupStatus('Province matched. Select or enter your ward number if you know it.');
       return;
     }
+
     setSelectedCity(city);
+
     const { data: citySuburbs, error: suburbError } = await client.from('suburbs').select('*').eq('city_id', city.id).order('name');
     if (suburbError) throw suburbError;
+
     setSuburbs(citySuburbs || []);
+
     const suburb = findLocationMatch(citySuburbs || [], [osmLocation.suburb, osmLocation.road, osmLocation.cityTown, osmLocation.district]);
+
     if (!suburb) {
       setLocationLookupStatus('City matched. Select or enter your ward number if you know it.');
       return;
     }
+
     setSelectedSuburb(suburb);
+
     const { data: suburbZones, error: zoneError } = await client.from('zones').select('*').eq('suburb_id', suburb.id).order('name');
     if (!zoneError) setZones(suburbZones || []);
+
     const { data: suburbWards, error: wardError } = await client.from('wards').select('*').eq('suburb_id', suburb.id).order('ward_number');
     if (wardError) throw wardError;
+
     setWards(suburbWards || []);
     setSelectedWard(null);
-    if (suburbWards?.length > 0) {
-      setLocationLookupStatus('Location matched. Select your ward from the list, or enter it manually if you are unsure.');
-    } else {
-      setLocationLookupStatus('Location matched. Enter your ward number manually if you know it.');
-    }
+
+    setLocationLookupStatus(
+      suburbWards?.length > 0
+        ? 'Location matched. Select your ward from the list, or enter it manually if you are unsure.'
+        : 'Location matched. Enter your ward number manually if you know it.'
+    );
   };
 
   const handleUseCurrentLocation = async () => {
     setDetectingLocation(true);
     setLocationLookupStatus('');
     setLocationErrors({});
+
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Allow location access so we can create your PinPoint address.');
         return;
       }
+
       const currentLocation = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
       const { latitude, longitude } = currentLocation.coords;
+
       const digitalAddress = createPinPointAddress(latitude, longitude);
       const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+
       setPinpointLocation({ latitude, longitude, digitalAddress, mapsUrl });
       setLocation(digitalAddress);
+
       try {
         const osmLocation = await reverseGeocodeWithOpenStreetMap(latitude, longitude);
         setLocation(buildOpenStreetMapAddressLabel(osmLocation, digitalAddress));
@@ -329,30 +383,49 @@ export default function SignupScreen() {
   ];
 
   const handleSendOTP = async () => {
-    if (!selectedRole) { Alert.alert('Error', 'Please select an account type'); return; }
+    if (!selectedRole) {
+      Alert.alert('Error', 'Please select an account type');
+      return;
+    }
+
     if (!SELF_SIGNUP_ROLES.includes(selectedRole)) {
       Alert.alert('Administrator Required', PRIVILEGED_ROLE_MESSAGE);
       return;
     }
+
     if (!firstName || !lastName || !email || !phoneNumber || !idNumber) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
+
     validateLocation();
+
     if (selectedRole === 'community_leader' && !organizationName) {
       Alert.alert('Error', 'Please enter your community or organisation name');
       return;
     }
+
     if (selectedRole === 'community_protection_service' && !cpsWardName.trim()) {
       Alert.alert('Error', 'Please enter the name of your ward');
       return;
     }
+
     setLoading(true);
+
     try {
       const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
+      const attemptState = await getOtpAttemptState(fullPhoneNumber);
+
+      if (attemptState.locked) {
+        Alert.alert('Too Many Attempts', `Try again in ${formatLockoutTime(attemptState.lockedUntil)}.`);
+        return;
+      }
+
       const client = getSupabaseClient();
-      const { error } = await client.auth.signInWithOtp({ phone: fullPhoneNumber });
+      const { error } = await withRequestTimeout(client.auth.signInWithOtp({ phone: fullPhoneNumber }));
+
       if (error) throw error;
+
       setVerificationId(fullPhoneNumber);
       setStep('otp');
       Alert.alert('OTP Sent', `A verification code was sent to ${fullPhoneNumber}`);
@@ -365,18 +438,26 @@ export default function SignupScreen() {
 
   const handleOtpChange = (value, index) => {
     if (!/^\d*$/.test(value)) return;
+
     const newOtp = [...otp];
+
     if (value.length > 1) {
       const digits = value.split('').slice(0, OTP_LENGTH - index);
-      digits.forEach((d, i) => { if (index + i < OTP_LENGTH) newOtp[index + i] = d; });
+      digits.forEach((digit, i) => {
+        if (index + i < OTP_LENGTH) newOtp[index + i] = digit;
+      });
       setOtp(newOtp);
       const nextIndex = Math.min(index + digits.length, OTP_LENGTH - 1);
       otpRefs.current[nextIndex]?.focus();
       return;
     }
+
     newOtp[index] = value;
     setOtp(newOtp);
-    if (value && index < OTP_LENGTH - 1) otpRefs.current[index + 1]?.focus();
+
+    if (value && index < OTP_LENGTH - 1) {
+      otpRefs.current[index + 1]?.focus();
+    }
   };
 
   const handleOtpKeyPress = (e, index) => {
@@ -385,41 +466,53 @@ export default function SignupScreen() {
     }
   };
 
-  const handleVerifyAndCreate = async () => {
-    console.log('=================================');
-    console.log('VERIFY BUTTON PRESSED');
-    console.log('OTP:', otp);
-    console.log('OTP length:', otp.join('').length);
-    console.log('Verification ID:', verificationId);
-    console.log('=================================');
+  const handleOtpBack = () => {
+    setStep('details');
+    setOtp(Array(OTP_LENGTH).fill(''));
+  };
 
+  const handleVerifyAndCreate = async () => {
     const otpString = otp.join('');
+
     if (otpString.length < OTP_LENGTH) {
       Alert.alert('Incomplete OTP', 'Please enter the 6-digit verification code.');
       return;
     }
+
     if (!SELF_SIGNUP_ROLES.includes(selectedRole)) {
       Alert.alert('Administrator Required', PRIVILEGED_ROLE_MESSAGE);
       setStep('details');
       setOtp(Array(OTP_LENGTH).fill(''));
       return;
     }
+
     setLoading(true);
+
     try {
       const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
-      console.log('Full phone:', fullPhoneNumber);
-      console.log('Starting Supabase OTP verification...');
+      const attemptState = await getOtpAttemptState(verificationId || fullPhoneNumber);
+
+      if (attemptState.locked) {
+        throw Object.assign(new Error('OTP_ATTEMPTS_LOCKED'), { lockedUntil: attemptState.lockedUntil });
+      }
+
       const client = getSupabaseClient();
-      const { data, error } = await client.auth.verifyOtp({
-        phone: verificationId || fullPhoneNumber,
-        token: otpString,
-        type: 'sms',
-      });
-      console.log('Supabase verifyOtp response:', { data, error });
-      if (error) { console.error('OTP VERIFICATION ERROR:', error); throw error; }
-      if (!data?.user) { console.error('No Supabase user returned:', data); throw new Error('Could not create Supabase user.'); }
-      console.log('SUPABASE USER CREATED:', data.user.id);
-      console.log('Creating users profile...');
+      const { data, error } = await withRequestTimeout(
+        client.auth.verifyOtp({ phone: verificationId || fullPhoneNumber, token: otpString, type: 'sms' }),
+        20000
+      );
+
+      if (error) {
+        console.error('OTP VERIFICATION ERROR:', error);
+        throw error;
+      }
+
+      await clearOtpAttempts(verificationId || fullPhoneNumber);
+
+      if (!data?.user) {
+        console.error('No Supabase user returned:', data);
+        throw new Error('Could not create Supabase user.');
+      }
 
       await upsertRow('users', {
         id: data.user.id,
@@ -460,10 +553,7 @@ export default function SignupScreen() {
         isMockUser: false,
       });
 
-      console.log('USERS PROFILE CREATED');
-
       if (pinpointLocation) {
-        console.log('Creating PinPoint record...');
         await insertRow('pinpoints', {
           userId: data.user.id,
           label: 'Home',
@@ -474,27 +564,43 @@ export default function SignupScreen() {
           qrPayload: pinpointLocation.mapsUrl,
           createdAt: new Date().toISOString(),
         });
-        console.log('PINPOINT CREATED');
       }
 
-      console.log('SIGNUP COMPLETE');
-      Alert.alert('Account Created Successfully!', 'Your account has been created. Please login to continue.', [
-        { text: 'Go to Login', onPress: () => router.replace('/login') },
-      ]);
+      await client.auth.signOut({ scope: 'local' });
+
+      const requiresApproval = selectedRole !== 'resident';
+
+      Alert.alert(
+        requiresApproval ? 'Account Submitted' : 'Account Created Successfully!',
+        requiresApproval
+          ? 'Your account was created with resident access. An administrator must approve the requested staff role before staff features become available.'
+          : 'Your account has been created. Please login to continue.',
+        [{ text: 'Go to Login', onPress: () => router.replace('/login') }]
+      );
     } catch (error) {
-      console.error('=================================');
       console.error('SIGNUP FAILED');
       console.error(error);
-      console.error('=================================');
-      Alert.alert('Signup Failed', getFriendlySupabaseError(error));
+
+      if (error?.message === 'OTP_ATTEMPTS_LOCKED') {
+        handleOtpBack();
+        Alert.alert('Too Many Attempts', `Try again in ${formatLockoutTime(error.lockedUntil)}.`);
+      } else if (isInvalidOtpError(error)) {
+        const state = await recordFailedOtpAttempt(verificationId || `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`);
+        setOtp(Array(OTP_LENGTH).fill(''));
+
+        if (state.locked) {
+          await getSupabaseClient().auth.signOut({ scope: 'local' });
+          handleOtpBack();
+          Alert.alert('Verification Locked', `Three incorrect codes were entered. Verification was cancelled; try again in ${formatLockoutTime(state.lockedUntil)}.`);
+        } else {
+          Alert.alert('Incorrect Code', `${state.remaining} attempt${state.remaining === 1 ? '' : 's'} remaining.`);
+        }
+      } else {
+        Alert.alert('Signup Failed', getFriendlySupabaseError(error));
+      }
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleOtpBack = () => {
-    setStep('details');
-    setOtp(Array(OTP_LENGTH).fill(''));
   };
 
   const locationSelectorProps = {
@@ -532,6 +638,7 @@ export default function SignupScreen() {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 40 }}>
         <SignupHeader step={step} />
+
         {step === 'details' ? (
           <SignupDetailsStep
             roles={roles}
@@ -576,6 +683,7 @@ export default function SignupScreen() {
             onVerify={handleVerifyAndCreate}
           />
         )}
+
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
           <Text style={{ textAlign: 'center', color: colors.text, fontSize: 14 }}>Already have an account?</Text>
           <TouchableOpacity onPress={() => router.push('/login')}>

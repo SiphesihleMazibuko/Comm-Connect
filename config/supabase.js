@@ -13,10 +13,33 @@ import {
   syncQueuedChanges,
 } from "./localDb/offlineStore";
 
-const isBrowser = Platform.OS === "web" && typeof window !== "undefined" && window.document !== undefined;
+const isBrowser =
+  Platform.OS === "web" &&
+  typeof window !== "undefined" &&
+  window.document !== undefined;
 const isServerRender = Platform.OS === "web" && !isBrowser;
 const offlineLog = (...args) => console.log("[SupabaseOffline]", ...args);
 const offlineWarn = (...args) => console.warn("[SupabaseOffline]", ...args);
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
+
+export const withRequestTimeout = (
+  request,
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+) => {
+  let timeoutId;
+
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error("REQUEST_TIMEOUT")),
+      timeoutMs,
+    );
+  });
+
+  return Promise.race([Promise.resolve(request), timeout]).finally(() =>
+    clearTimeout(timeoutId),
+  );
+};
 
 // Create storage adapter that works on both web and native
 const createStorage = () => {
@@ -36,7 +59,7 @@ const createStorage = () => {
         try {
           return Promise.resolve(localStorage.getItem(key));
         } catch (e) {
-          console.log(e,"localStorage getItem error");
+          console.log(e, "localStorage getItem error");
           return Promise.resolve(null);
         }
       },
@@ -45,7 +68,7 @@ const createStorage = () => {
           localStorage.setItem(key, value);
           return Promise.resolve();
         } catch (e) {
-          console.log(e,"localStorage setItem error");
+          console.log(e, "localStorage setItem error");
           return Promise.resolve();
         }
       },
@@ -54,7 +77,7 @@ const createStorage = () => {
           localStorage.removeItem(key);
           return Promise.resolve();
         } catch (e) {
-        console.log(e,"localStorage removeItem error");
+          console.log(e, "localStorage removeItem error");
           return Promise.resolve();
         }
       },
@@ -62,13 +85,14 @@ const createStorage = () => {
   }
 
   try {
-    const AsyncStorage = require("@react-native-async-storage/async-storage").default;
+    const AsyncStorage =
+      require("@react-native-async-storage/async-storage").default;
     console.log("Using AsyncStorage for native");
     return AsyncStorage;
   } catch (e) {
     console.warn("AsyncStorage not available, using memory storage");
-  console.log(e, "AsyncStorage not available, using memory storage");
-    
+    console.log(e, "AsyncStorage not available, using memory storage");
+
     return {
       getItem: (key) => Promise.resolve(null),
       setItem: (key, value) => Promise.resolve(),
@@ -99,7 +123,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 startConnectivityMonitor(() => syncQueuedChanges(supabase));
 refreshConnectivity().then((online) => {
   offlineLog(`Initial connectivity: ${online ? "ONLINE" : "OFFLINE"}`);
-  if (online) syncQueuedChanges(supabase).catch((error) => console.error("Initial offline sync failed:", error));
+  if (online)
+    syncQueuedChanges(supabase).catch((error) =>
+      console.error("Initial offline sync failed:", error),
+    );
 });
 
 const applyEqFilters = (query, options = {}) => {
@@ -135,38 +162,27 @@ const isLikelyNetworkError = (error) => {
   );
 };
 
-export const isMissingSchemaRelation = (error) => (
-  error?.code === "PGRST205"
-  || `${error?.message || ""}`.includes("Could not find the table")
-);
+export const isMissingSchemaRelation = (error) =>
+  error?.code === "PGRST205" ||
+  `${error?.message || ""}`.includes("Could not find the table");
 
 // GET CURRENT USER
 export const getCurrentUser = async () => {
   try {
-    if (!(await refreshConnectivity())) {
-      offlineLog("getCurrentUser: offline, using cached Supabase session.");
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      return session?.user || null;
-    }
-
     const {
-      data: { user },
+      data: { session },
       error,
-    } = await supabase.auth.getUser();
-    if (error) throw error;
-    return user;
-  } catch (error) {
-    console.error("Error getting current user:", error);
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      return session?.user || null;
-    } catch {
+    } = await supabase.auth.getSession();
+
+    if (error) {
+      console.warn("Error getting current session:", error);
       return null;
     }
+
+    return session?.user || null;
+  } catch (error) {
+    console.warn("Error getting current user session:", error);
+    return null;
   }
 };
 
@@ -191,12 +207,16 @@ export const getRows = async (table, options = {}) => {
     const { data, error } = await query;
     if (error) throw error;
     await cacheRows(table, data || []);
-    offlineLog(`getRows(${table}): fetched ${data?.length || 0} remote row(s), cached locally.`);
+    offlineLog(
+      `getRows(${table}): fetched ${data?.length || 0} remote row(s), cached locally.`,
+    );
     return data || [];
   } catch (error) {
     if (options.allowMissingTable && isMissingSchemaRelation(error)) {
       options.onMissingTable?.(error);
-      offlineWarn(`getRows(${table}): table is not available in the Supabase schema cache yet.`);
+      offlineWarn(
+        `getRows(${table}): table is not available in the Supabase schema cache yet.`,
+      );
       return [];
     }
 
@@ -264,7 +284,9 @@ const retryWithoutMissingColumn = async ({ table, data, error, runQuery }) => {
   if (!missingColumn || !data || !(missingColumn in data)) throw error;
 
   const { [missingColumn]: _missingColumn, ...fallbackData } = data;
-  offlineWarn(`${table}: retrying without missing schema column "${missingColumn}".`);
+  offlineWarn(
+    `${table}: retrying without missing schema column "${missingColumn}".`,
+  );
   return await runQuery(fallbackData);
 };
 
@@ -276,11 +298,14 @@ const runWithMissingColumnRetries = async ({ table, data, runQuery }) => {
       return await runQuery(payload);
     } catch (error) {
       const missingColumn = getMissingSchemaColumn(error);
-      if (!missingColumn || !payload || !(missingColumn in payload)) throw error;
+      if (!missingColumn || !payload || !(missingColumn in payload))
+        throw error;
 
       const { [missingColumn]: _missingColumn, ...fallbackPayload } = payload;
       payload = fallbackPayload;
-      offlineWarn(`${table}: retrying without missing schema column "${missingColumn}".`);
+      offlineWarn(
+        `${table}: retrying without missing schema column "${missingColumn}".`,
+      );
     }
   }
 
@@ -292,7 +317,9 @@ export const insertRow = async (table, data) => {
     const payload = table === "reports" ? normalizeReportPayload(data) : data;
 
     if (!(await refreshConnectivity())) {
-      offlineLog(`insertRow(${table}): offline, saving locally and queueing insert.`);
+      offlineLog(
+        `insertRow(${table}): offline, saving locally and queueing insert.`,
+      );
       return await saveLocalMutation(table, "insert", payload);
     }
 
@@ -306,7 +333,7 @@ export const insertRow = async (table, data) => {
       if (error) throw error;
       return insertedRow;
     };
-    
+
     let inserted;
     try {
       inserted = await runInsert(payload);
@@ -320,13 +347,21 @@ export const insertRow = async (table, data) => {
     }
 
     await cacheRow(table, inserted);
-    offlineLog(`insertRow(${table}): inserted remotely and cached ${inserted?.id || "new row"}.`);
+    offlineLog(
+      `insertRow(${table}): inserted remotely and cached ${inserted?.id || "new row"}.`,
+    );
     return inserted;
   } catch (error) {
     console.error(`Error inserting row into ${table}:`, error);
     if (!isOnline() || isLikelyNetworkError(error)) {
-      offlineWarn(`insertRow(${table}): network failure, saving locally and queueing insert.`);
-      return await saveLocalMutation(table, "insert", table === "reports" ? normalizeReportPayload(data) : data);
+      offlineWarn(
+        `insertRow(${table}): network failure, saving locally and queueing insert.`,
+      );
+      return await saveLocalMutation(
+        table,
+        "insert",
+        table === "reports" ? normalizeReportPayload(data) : data,
+      );
     }
     throw error;
   }
@@ -338,7 +373,9 @@ export const updateRow = async (table, id, data) => {
     const payload = table === "reports" ? normalizeReportPayload(data) : data;
 
     if (!(await refreshConnectivity())) {
-      offlineLog(`updateRow(${table}/${id}): offline, saving locally and queueing update.`);
+      offlineLog(
+        `updateRow(${table}/${id}): offline, saving locally and queueing update.`,
+      );
       return await saveLocalMutation(table, "update", payload, id);
     }
 
@@ -367,13 +404,22 @@ export const updateRow = async (table, id, data) => {
     }
 
     await cacheRow(table, updated);
-    offlineLog(`updateRow(${table}/${id}): updated remotely and cached locally.`);
+    offlineLog(
+      `updateRow(${table}/${id}): updated remotely and cached locally.`,
+    );
     return updated;
   } catch (error) {
     console.error(`Error updating row in ${table}:`, error);
     if (!isOnline() || isLikelyNetworkError(error)) {
-      offlineWarn(`updateRow(${table}/${id}): network failure, saving locally and queueing update.`);
-      return await saveLocalMutation(table, "update", table === "reports" ? normalizeReportPayload(data) : data, id);
+      offlineWarn(
+        `updateRow(${table}/${id}): network failure, saving locally and queueing update.`,
+      );
+      return await saveLocalMutation(
+        table,
+        "update",
+        table === "reports" ? normalizeReportPayload(data) : data,
+        id,
+      );
     }
     throw error;
   }
@@ -383,22 +429,23 @@ export const updateRow = async (table, id, data) => {
 export const deleteRow = async (table, id) => {
   try {
     if (!(await refreshConnectivity())) {
-      offlineLog(`deleteRow(${table}/${id}): offline, marking local delete and queueing delete.`);
+      offlineLog(
+        `deleteRow(${table}/${id}): offline, marking local delete and queueing delete.`,
+      );
       return await saveLocalMutation(table, "delete", {}, id);
     }
 
-    const { error } = await supabase
-      .from(table)
-      .delete()
-      .eq("id", id);
-    
+    const { error } = await supabase.from(table).delete().eq("id", id);
+
     if (error) throw error;
     offlineLog(`deleteRow(${table}/${id}): deleted remotely.`);
     return true;
   } catch (error) {
     console.error(`Error deleting row from ${table}:`, error);
     if (!isOnline() || isLikelyNetworkError(error)) {
-      offlineWarn(`deleteRow(${table}/${id}): network failure, marking local delete and queueing delete.`);
+      offlineWarn(
+        `deleteRow(${table}/${id}): network failure, marking local delete and queueing delete.`,
+      );
       return await saveLocalMutation(table, "delete", {}, id);
     }
     throw error;
@@ -408,7 +455,9 @@ export const deleteRow = async (table, id) => {
 // SUBSCRIBE TO TABLE CHANGES
 export const subscribeToTable = (table, callback) => {
   if (!isOnline()) {
-    offlineLog(`subscribeToTable(${table}): offline, skipping realtime subscription.`);
+    offlineLog(
+      `subscribeToTable(${table}): offline, skipping realtime subscription.`,
+    );
     return () => {};
   }
 
@@ -461,7 +510,9 @@ export const getUserProfile = async (userId) => {
       throw error;
     }
     await cacheRow("users", data);
-    offlineLog(`getUserProfile(${userId}): fetched remote profile, cached locally.`);
+    offlineLog(
+      `getUserProfile(${userId}): fetched remote profile, cached locally.`,
+    );
     return data;
   } catch (error) {
     console.error("Error getting user profile:", error);
@@ -474,8 +525,15 @@ export const getUserProfile = async (userId) => {
 export const upsertRow = async (table, data) => {
   try {
     if (!(await refreshConnectivity())) {
-      offlineLog(`upsertRow(${table}): offline, saving locally and queueing ${data.id ? "update" : "insert"}.`);
-      return await saveLocalMutation(table, data.id ? "update" : "insert", data, data.id);
+      offlineLog(
+        `upsertRow(${table}): offline, saving locally and queueing ${data.id ? "update" : "insert"}.`,
+      );
+      return await saveLocalMutation(
+        table,
+        data.id ? "update" : "insert",
+        data,
+        data.id,
+      );
     }
 
     const client = getSupabaseClient();
@@ -511,7 +569,9 @@ export const upsertRow = async (table, data) => {
         });
 
         await cacheRow(table, updated);
-        offlineLog(`upsertRow(${table}/${data.id}): updated remotely and cached locally.`);
+        offlineLog(
+          `upsertRow(${table}/${data.id}): updated remotely and cached locally.`,
+        );
         return updated;
       }
     }
@@ -534,13 +594,22 @@ export const upsertRow = async (table, data) => {
     });
 
     await cacheRow(table, inserted);
-    offlineLog(`upsertRow(${table}): inserted remotely and cached ${inserted?.id || "new row"}.`);
+    offlineLog(
+      `upsertRow(${table}): inserted remotely and cached ${inserted?.id || "new row"}.`,
+    );
     return inserted;
   } catch (error) {
     console.error("Error in upsertRow:", error);
     if (!isOnline() || isLikelyNetworkError(error)) {
-      offlineWarn(`upsertRow(${table}): network failure, saving locally and queueing ${data.id ? "update" : "insert"}.`);
-      return await saveLocalMutation(table, data.id ? "update" : "insert", data, data.id);
+      offlineWarn(
+        `upsertRow(${table}): network failure, saving locally and queueing ${data.id ? "update" : "insert"}.`,
+      );
+      return await saveLocalMutation(
+        table,
+        data.id ? "update" : "insert",
+        data,
+        data.id,
+      );
     }
     throw error;
   }

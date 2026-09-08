@@ -363,7 +363,6 @@ export default function PinPointScreen() {
 
       const currentLocation = await getHighAccuracyLocation();
       const shareToken = makeShareToken();
-
       const userName = `${latestProfile?.firstName || ''} ${latestProfile?.lastName || ''}`.trim() || user.email || 'PinPoint user';
       const createdAt = new Date().toISOString();
 

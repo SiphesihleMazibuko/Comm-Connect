@@ -789,4 +789,173 @@ create trigger audit_emergency_contacts_changes
 after insert or update or delete on public.emergency_contacts
 for each row execute function private.write_audit_log();
 
+-- Security hardening: privileged roles are requests until a trusted backend/admin
+-- approves them. Client-side tab visibility is not an authorization boundary.
+alter table public.users add column if not exists "requestedRole" text;
+alter table public.users add column if not exists "approvalStatus" text not null default 'approved';
+
+create or replace function public.protect_user_privileges()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.role in ('community_leader', 'leader', 'community_protection_service', 'emergency_responder') then
+      new."requestedRole" := new.role;
+      new.role := 'resident';
+      new."approvalStatus" := 'pending';
+      new.permissions := coalesce(new.permissions, '{}'::jsonb) || jsonb_build_object(
+        'canReviewReports', false,
+        'canRespondToEmergency', false,
+        'canClockInForDuty', false,
+        'canSendCommunityAlerts', false
+      );
+    else
+      new."approvalStatus" := 'approved';
+    end if;
+  elsif auth.role() = 'authenticated' and (
+    new.role is distinct from old.role
+    or new."requestedRole" is distinct from old."requestedRole"
+    or new."approvalStatus" is distinct from old."approvalStatus"
+  ) then
+    raise exception 'Only an administrator may change account roles or approval status';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_user_privileges_trigger on public.users;
+create trigger protect_user_privileges_trigger
+before insert or update on public.users
+for each row execute function public.protect_user_privileges();
+
+-- Reports can be updated by their submitter or an approved community leader.
+drop policy if exists "Authenticated users can update reports" on public.reports;
+create policy "Owners and leaders can update reports"
+on public.reports
+for update
+to authenticated
+using (
+  "submittedBy" = auth.uid()
+  or exists (
+    select 1 from public.users
+    where users.id = auth.uid()
+      and users.role in ('community_leader', 'leader')
+      and users."approvalStatus" = 'approved'
+  )
+)
+with check (
+  "submittedBy" = auth.uid()
+  or exists (
+    select 1 from public.users
+    where users.id = auth.uid()
+      and users.role in ('community_leader', 'leader')
+      and users."approvalStatus" = 'approved'
+  )
+);
+
+-- Only approved responder accounts may create or change dispatches.
+drop policy if exists "Authenticated users can create dispatches" on public.emergency_dispatches;
+create policy "Responders can create dispatches"
+on public.emergency_dispatches
+for insert
+to authenticated
+with check (
+  "dispatchedBy" = auth.uid()
+  and exists (
+    select 1 from public.users
+    where users.id = auth.uid()
+      and users.role in ('community_protection_service', 'emergency_responder')
+      and users."approvalStatus" = 'approved'
+  )
+);
+
+drop policy if exists "Authenticated users can update dispatches" on public.emergency_dispatches;
+create policy "Responders can update dispatches"
+on public.emergency_dispatches
+for update
+to authenticated
+using (
+  exists (
+    select 1 from public.users
+    where users.id = auth.uid()
+      and users.role in ('community_protection_service', 'emergency_responder')
+      and users."approvalStatus" = 'approved'
+  )
+)
+with check (
+  exists (
+    select 1 from public.users
+    where users.id = auth.uid()
+      and users.role in ('community_protection_service', 'emergency_responder')
+      and users."approvalStatus" = 'approved'
+  )
+);
+
+-- Masked user directory and full approved-admin access. Normal users retain
+-- full access only to their own profile through the existing users RLS policy.
+create or replace function public.mask_name(value text, visible_characters integer default 2)
+returns text language sql immutable set search_path = public
+as $$
+  select case when nullif(trim(value), '') is null then null
+    else left(trim(value), greatest(1, visible_characters)) || '***' end
+$$;
+
+create or replace function public.mask_phone(value text)
+returns text language sql immutable set search_path = public
+as $$
+  select case when nullif(trim(value), '') is null then null
+    else repeat('*', greatest(length(trim(value)) - 4, 0)) || right(trim(value), 4) end
+$$;
+
+create or replace function public.mask_email(value text)
+returns text language sql immutable set search_path = public
+as $$
+  select case when nullif(trim(value), '') is null then null
+    when position('@' in value) = 0 then left(value, 2) || '***'
+    else left(split_part(value, '@', 1), 2) || '***@' || split_part(value, '@', 2) end
+$$;
+
+create or replace function public.mask_identifier(value text)
+returns text language sql immutable set search_path = public
+as $$
+  select case when nullif(trim(value), '') is null then null
+    else repeat('*', greatest(length(trim(value)) - 4, 0)) || right(trim(value), 4) end
+$$;
+
+create or replace function public.is_approved_admin()
+returns boolean language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from public.users
+    where id = auth.uid() and role = 'admin' and "approvalStatus" = 'approved'
+  )
+$$;
+
+revoke all on function public.is_approved_admin() from public;
+grant execute on function public.is_approved_admin() to authenticated;
+
+drop policy if exists "Approved admins can read user profiles" on public.users;
+create policy "Approved admins can read user profiles"
+on public.users for select to authenticated
+using ((select public.is_approved_admin()));
+
+drop view if exists public.masked_user_directory;
+create view public.masked_user_directory with (security_barrier = true) as
+select
+  id,
+  public.mask_name("firstName", 2) as "firstName",
+  public.mask_name("lastName", 1) as "lastName",
+  public.mask_phone("phoneNumber") as "phoneNumber",
+  public.mask_email(email) as email,
+  public.mask_identifier("idNumber") as "idNumber",
+  role, "approvalStatus", ward_id, suburb_id, city_id, province_id
+from public.users
+where auth.uid() is not null;
+
+revoke all on public.masked_user_directory from public, anon;
+grant select on public.masked_user_directory to authenticated;
+
 notify pgrst, 'reload schema';
