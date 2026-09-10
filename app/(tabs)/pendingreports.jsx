@@ -2,11 +2,12 @@ import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Stop } from 'react-native-svg';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Image, Modal, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ScreenHeader from '../../components/ScreenHeader';
+import CrimeReportsModal from '../../components/crime-reports-modal';
 import { getCurrentUser, getRows, getUserProfile, insertRow, updateRow } from '../../config/supabase';
 import { useTheme } from '../context/ThemeContext';
 
@@ -33,7 +34,7 @@ const OTHER_CATEGORIES = [
   { id: 'other_event', label: 'Other' },
 ];
 
-const StatsGauge = ({ title, value, subtitle, icon, colors, isDark }) => {
+const StatsGauge = ({ title, value, subtitle, icon, colors, isDark, onPress }) => {
   const maxReports = 50;
   const safePercentage = Math.max(0, Math.min(100, (Number(value) || 0) / maxReports * 100));
 
@@ -64,7 +65,7 @@ const StatsGauge = ({ title, value, subtitle, icon, colors, isDark }) => {
   const filledPath = safePercentage > 0 ? describeArc(centerX, centerY, radius, startAngle, startAngle + filledAngle) : '';
 
   return (
-    <View style={{ width: '48.5%', marginBottom: 14, borderRadius: 22, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}>
+    <TouchableOpacity onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}: ${value} ${value === 1 ? 'report' : 'reports'}. View reports`} style={{ width: '48.5%', marginBottom: 14, borderRadius: 22, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}>
       <View style={{ paddingTop: 15, paddingHorizontal: 8, alignItems: 'center' }}>
         <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: 34 }}>
           <View style={{ width: 28, height: 28, borderRadius: 9, backgroundColor: colors.accentLight, justifyContent: 'center', alignItems: 'center', marginRight: 6 }}>
@@ -93,7 +94,7 @@ const StatsGauge = ({ title, value, subtitle, icon, colors, isDark }) => {
           {subtitle}
         </Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -102,6 +103,7 @@ export default function PendingReportsScreen() {
 
   const [reports, setReports] = useState([]);
   const [wardReports, setWardReports] = useState([]);
+  const [selectedCrimeCategory, setSelectedCrimeCategory] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const [selectedReport, setSelectedReport] = useState(null);
@@ -115,7 +117,29 @@ export default function PendingReportsScreen() {
   const [selectedServices, setSelectedServices] = useState([]);
   const [dispatching, setDispatching] = useState(false);
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [fadeAnim] = useState(() => new Animated.Value(0));
+
+  const fetchPendingReports = useCallback(async (profile) => {
+    try {
+      let reportsData;
+      let wardReportsData;
+
+      if (['community_leader', 'leader'].includes(profile?.role) && profile?.ward_id) {
+        reportsData = await getRows('reports', { filters: { status: 'pending_review', ward_id: profile.ward_id } });
+        wardReportsData = await getRows('reports', { filters: { ward_id: profile.ward_id } });
+      } else {
+        reportsData = await getRows('reports', { filters: { status: 'pending_review' } });
+        wardReportsData = [];
+      }
+
+      setReports(reportsData || []);
+      setWardReports(wardReportsData || []);
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -139,31 +163,12 @@ export default function PendingReportsScreen() {
     load();
 
     Animated.timing(fadeAnim, { toValue: 1, duration: 650, useNativeDriver: true }).start();
-  }, []);
+  }, [fadeAnim, fetchPendingReports]);
 
-  const fetchPendingReports = async (profile = userProfile) => {
-    try {
-      let reportsData;
-      let wardReportsData;
-
-      if (profile?.role === 'community_leader' && profile?.ward_id) {
-        reportsData = await getRows('reports', { filters: { status: 'pending_review', ward_id: profile.ward_id } });
-        wardReportsData = await getRows('reports', { filters: { ward_id: profile.ward_id } });
-      } else {
-        reportsData = await getRows('reports', { filters: { status: 'pending_review' } });
-        wardReportsData = [];
-      }
-
-      setReports(reportsData || []);
-      setWardReports(wardReportsData || []);
-    } catch (error) {
-      console.error('Error fetching reports:', error);
-    } finally {
-      setLoading(false);
-    }
+  const getReportCrimeCategory = (report) => {
+    const category = report?.crimeCategory || report?.location?.crimeCategory;
+    return CRIME_CATEGORIES.some(({ id }) => id === category) ? category : 'other_crime';
   };
-
-  const getReportCrimeCategory = (report) => report?.crimeCategory || report?.location?.crimeCategory || 'other_crime';
 
   const getCrimeCategoryLabel = (value) => CRIME_CATEGORIES.find((category) => category.id === value)?.label || 'Other Crime';
 
@@ -203,10 +208,13 @@ export default function PendingReportsScreen() {
 
   const crimeMatrix = CRIME_CATEGORIES.map((category) => ({
     ...category,
-    count: wardReports.filter((report) => report.reportType === 'crime' && getReportCrimeCategory(report) === category.id).length,
+    reports: wardReports
+      .filter((report) => report.reportType === 'crime' && getReportCrimeCategory(report) === category.id)
+      .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0)),
   }));
 
-  const totalCrimeReports = crimeMatrix.reduce((total, category) => total + category.count, 0);
+  const totalCrimeReports = crimeMatrix.reduce((total, category) => total + category.reports.length, 0);
+  const activeCrimeCategory = crimeMatrix.find((category) => category.id === selectedCrimeCategory);
 
   const openDispatchModal = (report) => {
     setReportToApprove(report);
@@ -422,7 +430,7 @@ export default function PendingReportsScreen() {
           </LinearGradient>
         </View>
 
-        {userProfile?.role === 'community_leader' && (
+        {['community_leader', 'leader'].includes(userProfile?.role) && (
           <View style={{ paddingHorizontal: 16, marginTop: 18 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}>
               <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: colors.accentLight, justifyContent: 'center', alignItems: 'center' }}>
@@ -439,7 +447,7 @@ export default function PendingReportsScreen() {
             </View>
 
             <Text style={{ color: colors.textLight, fontSize: 10, lineHeight: 16, marginBottom: 12 }}>
-              Each gauge shows the number of reports out of 50 (full gauge = 50 reports).
+              Tap a category to view reports and reporter details. Each gauge shows reports out of 50.
             </Text>
 
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
@@ -447,8 +455,9 @@ export default function PendingReportsScreen() {
                 <StatsGauge
                   key={category.id}
                   title={category.label}
-                  value={category.count}
-                  subtitle={category.count === 1 ? 'Report' : 'Reports'}
+                  value={category.reports.length}
+                  subtitle="Tap to view reports"
+                  onPress={() => setSelectedCrimeCategory(category.id)}
                   icon={category.icon}
                   colors={colors}
                   isDark={isDark}
@@ -481,6 +490,16 @@ export default function PendingReportsScreen() {
           )}
         </View>
       </Animated.ScrollView>
+
+      {activeCrimeCategory && (
+        <CrimeReportsModal
+          key={activeCrimeCategory.id}
+          category={activeCrimeCategory}
+          reports={activeCrimeCategory.reports}
+          colors={colors}
+          onClose={() => setSelectedCrimeCategory(null)}
+        />
+      )}
 
       <Modal visible={detailModalVisible} animationType="slide" transparent onRequestClose={() => setDetailModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' }}>

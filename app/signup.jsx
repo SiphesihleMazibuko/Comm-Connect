@@ -19,6 +19,7 @@ import {
 import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode, searchCountryCodes } from '../Utils/countryCodes';
 import { buildOpenStreetMapAddressLabel, reverseGeocodeWithOpenStreetMap } from '../Utils/openStreetMapLocation';
 import { clearOtpAttempts, formatLockoutTime, getOtpAttemptState, isInvalidOtpError, recordFailedOtpAttempt } from '../Utils/otpSecurity';
+import { validateSignup } from '../Utils/signup-validation';
 
 import { useTheme } from './context/ThemeContext';
 
@@ -69,6 +70,11 @@ export default function SignupScreen() {
 
   const [organizationName, setOrganizationName] = useState('');
   const [cpsWardName, setCpsWardName] = useState('');
+  const [touchedFields, setTouchedFields] = useState({});
+  const [submittedDetails, setSubmittedDetails] = useState(false);
+  const validation = validateSignup({ selectedRole, firstName, lastName, email, phoneNumber, selectedCountry, idNumber, organizationName, cpsWardName });
+  const fieldErrors = Object.fromEntries(Object.entries(validation.errors).filter(([field]) => submittedDetails || touchedFields[field]));
+  const handleFieldBlur = (field) => setTouchedFields((previous) => ({ ...previous, [field]: true }));
 
   const [provinces, setProvinces] = useState([]);
   const [cities, setCities] = useState([]);
@@ -378,32 +384,19 @@ export default function SignupScreen() {
   ];
 
   const handleSendOTP = async () => {
-    if (!selectedRole) {
-      Alert.alert('Error', 'Please select an account type');
-      return;
-    }
-
-    if (!firstName || !lastName || !email || !phoneNumber || !idNumber) {
-      Alert.alert('Error', 'Please fill in all required fields');
+    if (loading) return;
+    setSubmittedDetails(true);
+    if (Object.keys(validation.errors).length) {
+      Alert.alert('Check Your Details', Object.values(validation.errors)[0]);
       return;
     }
 
     validateLocation();
 
-    if (selectedRole === 'community_leader' && !organizationName) {
-      Alert.alert('Error', 'Please enter your community or organisation name');
-      return;
-    }
-
-    if (selectedRole === 'community_protection_service' && !cpsWardName.trim()) {
-      Alert.alert('Error', 'Please enter the name of your ward');
-      return;
-    }
-
     setLoading(true);
 
     try {
-      const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
+      const fullPhoneNumber = validation.values.phoneNumber;
       const attemptState = await getOtpAttemptState(fullPhoneNumber);
 
       if (attemptState.locked) {
@@ -462,6 +455,19 @@ export default function SignupScreen() {
   };
 
   const handleVerifyAndCreate = async () => {
+    if (loading) return;
+    if (Object.keys(validation.errors).length) {
+      setSubmittedDetails(true);
+      setStep('details');
+      Alert.alert('Check Your Details', Object.values(validation.errors)[0]);
+      return;
+    }
+    if (!verificationId || verificationId !== validation.values.phoneNumber) {
+      setStep('details');
+      setOtp(Array(OTP_LENGTH).fill(''));
+      Alert.alert('Request a New Code', 'Your phone number changed. Request a new OTP for this number.');
+      return;
+    }
     const otpString = otp.join('');
 
     if (otpString.length < OTP_LENGTH) {
@@ -472,7 +478,7 @@ export default function SignupScreen() {
     setLoading(true);
 
     try {
-      const fullPhoneNumber = `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`;
+      const fullPhoneNumber = validation.values.phoneNumber;
       const attemptState = await getOtpAttemptState(verificationId || fullPhoneNumber);
 
       if (attemptState.locked) {
@@ -499,14 +505,14 @@ export default function SignupScreen() {
 
       await upsertRow('users', {
         id: data.user.id,
-        firstName,
-        lastName,
-        email,
+        firstName: validation.values.firstName,
+        lastName: validation.values.lastName,
+        email: validation.values.email,
         phoneNumber: fullPhoneNumber,
-        idNumber,
+        idNumber: validation.values.idNumber,
         location: location || pinpointLocation?.digitalAddress || null,
         role: selectedRole,
-        organizationName: selectedRole === 'community_leader' ? organizationName : null,
+        organizationName: selectedRole === 'community_leader' ? validation.values.organizationName : null,
         responderType: selectedRole === 'community_protection_service' ? 'community_protection_service' : null,
         serviceType: selectedRole === 'community_protection_service' ? 'community_protection_service' : null,
         wardName: selectedRole === 'community_protection_service' ? cpsWardName.trim() : null,
@@ -568,7 +574,7 @@ export default function SignupScreen() {
         handleOtpBack();
         Alert.alert('Too Many Attempts', `Try again in ${formatLockoutTime(error.lockedUntil)}.`);
       } else if (isInvalidOtpError(error)) {
-        const state = await recordFailedOtpAttempt(verificationId || `${selectedCountry.code}${phoneNumber.trim().replace(/^0/, '')}`);
+        const state = await recordFailedOtpAttempt(verificationId);
         setOtp(Array(OTP_LENGTH).fill(''));
 
         if (state.locked) {
@@ -624,6 +630,8 @@ export default function SignupScreen() {
 
         {step === 'details' ? (
           <SignupDetailsStep
+            fieldErrors={fieldErrors}
+            onFieldBlur={handleFieldBlur}
             roles={roles}
             selectedRole={selectedRole}
             setSelectedRole={setSelectedRole}

@@ -2,14 +2,16 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, Share, Text, TextInput, Vibration, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, Modal, ScrollView, Share, Text, TextInput, Vibration, View } from 'react-native';
 import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
 import QRCode from 'react-native-qrcode-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ScreenHeader from '../../components/ScreenHeader';
-import { deleteRow, getCurrentUser, getRows, getUserProfile, insertRow, updateRow } from '../../config/supabase';
-import { notifyEmergencyContactsBySms, showLocalSosNotification } from '../../config/notifications';
+import { deleteRow, getCurrentUser, getRows, getSupabaseClient, getUserProfile, insertRow, subscribeToTable, updateRow, withRequestTimeout } from '../../config/supabase';
+import { notifyEmergencyContactByWhatsApp, showLocalSosNotification } from '../../config/notifications';
+import { stopSosAlert } from '../../config/sos';
+import { resolveSosUpdate } from '../../Utils/sos-state';
 import { useTheme } from '../context/ThemeContext';
 
 const HOLD_SECONDS = 5;
@@ -73,6 +75,9 @@ export default function PinPointScreen() {
   const [sosStarting, setSosStarting] = useState(false);
   const [sosActive, setSosActive] = useState(false);
   const [sosAlertId, setSosAlertId] = useState(null);
+  const [activeSos, setActiveSos] = useState(null);
+  const [sosReady, setSosReady] = useState(false);
+  const [sosStopping, setSosStopping] = useState(false);
   const [holdCountdown, setHoldCountdown] = useState(HOLD_SECONDS);
 
   const router = useRouter();
@@ -86,25 +91,8 @@ export default function PinPointScreen() {
   const sosLocationHistoryRef = useRef([]);
   const sosLocationMetaRef = useRef({});
   const locationRequestRef = useRef(0);
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const currentUser = await getCurrentUser();
-        setUser(currentUser);
-        if (currentUser) await loadSavedAddresses(currentUser);
-      } catch (error) {
-        console.error('PinPoint initial load error:', error);
-      }
-    };
-
-    load();
-
-    return () => {
-      clearSosHold();
-      clearSosLocationUpdates();
-    };
-  }, []);
+  const sosRevisionRef = useRef(0);
+  const locationUpdatingRef = useRef(false);
 
   const getCurrentLocation = async () => {
     const requestId = locationRequestRef.current + 1;
@@ -190,7 +178,7 @@ export default function PinPointScreen() {
     }
   };
 
-  const loadSavedAddresses = async (currentUser = user) => {
+  const loadSavedAddresses = useCallback(async (currentUser) => {
     if (!currentUser?.id) return;
 
     try {
@@ -199,7 +187,7 @@ export default function PinPointScreen() {
     } catch (error) {
       console.error('Error loading addresses:', error);
     }
-  };
+  }, []);
 
   const shareAddress = async (address) => {
     try {
@@ -237,7 +225,7 @@ export default function PinPointScreen() {
     );
   };
 
-  const getHighAccuracyLocation = async () => {
+  const getHighAccuracyLocation = useCallback(async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') throw new Error('Location permission is required for SOS tracking.');
 
@@ -253,9 +241,9 @@ export default function PinPointScreen() {
       mapsUrl: `https://www.google.com/maps?q=${latitude},${longitude}`,
       recordedAt: new Date().toISOString(),
     };
-  };
+  }, []);
 
-  const clearSosHold = () => {
+  const clearSosHold = useCallback(() => {
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
     if (holdVibrationRef.current) clearInterval(holdVibrationRef.current);
@@ -266,46 +254,135 @@ export default function PinPointScreen() {
 
     Vibration.cancel();
     setHoldCountdown(HOLD_SECONDS);
-  };
+  }, []);
 
-  const clearSosLocationUpdates = () => {
+  const clearSosLocationUpdates = useCallback(() => {
     if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
     locationIntervalRef.current = null;
-  };
+  }, []);
 
-  const updateSosLocation = async () => {
+  useEffect(() => {
+    let disposed = false;
+    const load = async () => {
+      try {
+        const currentUser = await getCurrentUser();
+        if (disposed) return;
+        setUser(currentUser);
+        if (currentUser) await loadSavedAddresses(currentUser);
+        else setSosReady(true);
+      } catch (error) {
+        console.error('PinPoint initial load error:', error);
+      }
+    };
+    load();
+    return () => {
+      disposed = true;
+      clearSosHold();
+      clearSosLocationUpdates();
+    };
+  }, [clearSosHold, clearSosLocationUpdates, loadSavedAddresses]);
+  const updateSosLocation = useCallback(async () => {
     const alertId = sosAlertIdRef.current;
     if (!isValidRemoteId(alertId)) {
       clearSosLocationUpdates();
       return;
     }
 
+    if (locationUpdatingRef.current || AppState.currentState !== 'active') return;
+    locationUpdatingRef.current = true;
     try {
       const currentLocation = await getHighAccuracyLocation();
+      if (sosAlertIdRef.current !== alertId) return;
       sosLocationHistoryRef.current = [...sosLocationHistoryRef.current.slice(-11), currentLocation];
 
-      await updateRow('emergencyRequests', alertId, {
+      const { error } = await withRequestTimeout(getSupabaseClient().from('emergencyRequests').update({
         location: {
           ...(sosLocationMetaRef.current || {}),
           currentLocation,
           locationHistory: sosLocationHistoryRef.current,
           lastLocationAt: currentLocation.recordedAt,
         },
-      });
+      }).eq('id', alertId).eq('status', 'active'));
+      if (error) throw error;
 
       console.log('[SOS] Live location updated.', currentLocation);
     } catch (error) {
       console.error('[SOS] Failed to update live location:', error);
+    } finally {
+      locationUpdatingRef.current = false;
+    }
+  }, [clearSosLocationUpdates, getHighAccuracyLocation]);
+
+  const startSosLocationUpdates = useCallback(() => {
+    clearSosLocationUpdates();
+    locationIntervalRef.current = setInterval(updateSosLocation, SOS_LOCATION_INTERVAL_MS);
+  }, [clearSosLocationUpdates, updateSosLocation]);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    let disposed = false;
+    let refreshing = false;
+    const restore = async () => {
+      if (refreshing) return;
+      refreshing = true;
+      const revision = sosRevisionRef.current;
+      try {
+        const rows = await getRows('emergencyRequests', {
+          filters: { userId: user.id, emergencyType: 'sos' },
+          order: [{ column: 'createdAt', ascending: false }],
+        });
+        if (disposed || revision !== sosRevisionRef.current) return;
+        const resolution = resolveSosUpdate(rows, sosAlertIdRef.current);
+        if (resolution.kind === 'active') {
+          const active = resolution.alert;
+          const changed = sosAlertIdRef.current !== active.id;
+          sosAlertIdRef.current = active.id;
+          sosLocationMetaRef.current = active.location || {};
+          sosLocationHistoryRef.current = active.location?.locationHistory || [];
+          setActiveSos(active);
+          setSosAlertId(active.id);
+          setSosActive(true);
+          if (changed || !locationIntervalRef.current) startSosLocationUpdates();
+        } else if (resolution.kind === 'stopped') {
+          clearSosLocationUpdates();
+          sosAlertIdRef.current = null;
+          setSosAlertId(null);
+          setActiveSos(null);
+          setSosActive(false);
+        }
+      } catch (error) {
+        console.warn('[SOS] Keeping current SOS while reconnection is pending:', error);
+      } finally {
+        refreshing = false;
+        if (!disposed) setSosReady(true);
+      }
+    };
+    restore();
+    const poll = setInterval(restore, 5000);
+    const unsubscribe = subscribeToTable('emergencyRequests', restore);
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') restore();
+    });
+    return () => {
+      disposed = true;
+      clearInterval(poll);
+      unsubscribe?.();
+      appState.remove();
+      clearSosLocationUpdates();
+    };
+  }, [user?.id, clearSosLocationUpdates, startSosLocationUpdates]);
+
+  const shareSosOnWhatsApp = async (contact, alert = activeSos) => {
+    if (!alert) return;
+    try {
+      await notifyEmergencyContactByWhatsApp({ contact, alert, trackingUrl: alert.location?.trackingUrl });
+    } catch (error) {
+      Alert.alert('SOS Still Active', `WhatsApp could not be opened. Your SOS remains active. ${error?.message || 'Please try again.'}`);
     }
   };
 
-  const startSosLocationUpdates = () => {
-    clearSosLocationUpdates();
-    locationIntervalRef.current = setInterval(updateSosLocation, SOS_LOCATION_INTERVAL_MS);
-  };
-
   const activateSos = async () => {
-    if (sosStarting || sosActive) return;
+    if (sosStarting || sosActive || !sosReady || sosAlertIdRef.current) return;
 
     if (!user?.id) {
       Alert.alert('Login Required', 'Please log in before triggering SOS.');
@@ -368,6 +445,15 @@ export default function PinPointScreen() {
         throw new Error('SOS request was created without a valid remote ID. Please try again when your connection is stable.');
       }
 
+      // Persisted SOS is active before opening another app or sending notifications.
+      sosRevisionRef.current += 1;
+      sosAlertIdRef.current = alertId;
+      sosLocationMetaRef.current = alert.location || {};
+      setSosAlertId(alertId);
+      setActiveSos(alert);
+      setSosActive(true);
+      startSosLocationUpdates();
+
       const trackingUrl = Linking.createURL(`/sos/${alertId}`, { queryParams: { token: shareToken } });
 
       sosLocationMetaRef.current = {
@@ -387,29 +473,15 @@ export default function PinPointScreen() {
         },
       });
 
-      const smsOpened = await notifyEmergencyContactsBySms({
-        contacts: sosContacts,
-        alert: { ...alert, id: alertId, userName },
-        trackingUrl,
-      });
+      const shareAlert = { ...alert, location: { ...alert.location, trackingUrl } };
+      setActiveSos(shareAlert);
 
-      await showLocalSosNotification(alertId);
-
-      sosAlertIdRef.current = alertId;
-      setSosAlertId(alertId);
-      setSosActive(true);
-
-      startSosLocationUpdates();
-
-      Alert.alert(
-        'SOS Active',
-        smsOpened
-          ? 'Your SMS app opened with the emergency message. Your live location is updating every 10 seconds.'
-          : 'Your live location is updating every 10 seconds, but no SMS app or contact phone number was available.'
-      );
+      // A local notification is optional and must not delay WhatsApp sharing.
+      void showLocalSosNotification(alertId);
+      await shareSosOnWhatsApp(sosContacts[0], shareAlert);
     } catch (error) {
       console.error('[SOS] Failed to activate:', error);
-      Alert.alert('SOS Failed', error?.message || 'Failed to activate SOS. Please try again.');
+      Alert.alert(sosAlertIdRef.current ? 'SOS Still Active' : 'SOS Failed', error?.message || 'Please try again.');
     } finally {
       setSosStarting(false);
       clearSosHold();
@@ -417,7 +489,7 @@ export default function PinPointScreen() {
   };
 
   const startSosHold = () => {
-    if (sosActive || sosStarting) return;
+    if (sosActive || sosStarting || !sosReady || sosAlertIdRef.current) return;
 
     setHoldCountdown(HOLD_SECONDS);
     Vibration.vibrate(120);
@@ -447,11 +519,16 @@ export default function PinPointScreen() {
       return;
     }
 
+    if (sosStopping) return;
+    setSosStopping(true);
+    sosRevisionRef.current += 1;
     try {
+      await stopSosAlert(alertId);
+      sosRevisionRef.current += 1;
       clearSosLocationUpdates();
-      await updateRow('emergencyRequests', alertId, { status: 'cancelled', completedAt: new Date().toISOString() });
 
       setSosActive(false);
+      setActiveSos(null);
       setSosAlertId(null);
       sosAlertIdRef.current = null;
       sosLocationHistoryRef.current = [];
@@ -460,7 +537,9 @@ export default function PinPointScreen() {
       Alert.alert('SOS Stopped', 'Live location sharing has been stopped.');
     } catch (error) {
       console.error('[SOS] Failed to stop:', error);
-      Alert.alert('Error', 'Failed to stop SOS. Please try again.');
+      Alert.alert('SOS Still Active', 'Stopping could not be confirmed. Check your connection and try again.');
+    } finally {
+      setSosStopping(false);
     }
   };
 
@@ -670,7 +749,7 @@ export default function PinPointScreen() {
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>Emergency SOS</Text>
               <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 3 }}>
-                {sosActive ? 'Your live location is being shared' : 'Hold the button for 5 seconds'}
+                {sosActive ? 'Active until you or a CPF member stops it' : 'Hold the button for 5 seconds'}
               </Text>
             </View>
           </View>
@@ -680,17 +759,29 @@ export default function PinPointScreen() {
             onPress={sosActive ? stopSos : undefined}
             onPressIn={startSosHold}
             onPressOut={cancelSosHold}
-            disabled={sosStarting}
+            disabled={sosStarting || sosStopping || !sosReady}
           >
-            {sosStarting ? (
+            {sosStarting || sosStopping || !sosReady ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <Ionicons name={sosActive ? 'checkmark-circle' : 'alert-circle'} size={25} color="#fff" />
             )}
             <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>
-              {sosActive ? 'Stop SOS Live Tracking' : `Hold ${holdCountdown}s to Send SOS`}
+              {!sosReady ? 'Checking active SOS...' : sosStopping ? 'Stopping SOS...' : sosActive ? 'Stop SOS Live Tracking' : `Hold ${holdCountdown}s to Send SOS`}
             </Text>
           </TouchableOpacity>
+
+          {sosActive && (
+            <View style={{ marginTop: 12, gap: 10 }}>
+              <Text style={{ color: colors.textLight, fontSize: 12, lineHeight: 18 }}>Tap each contact below, then tap Send in WhatsApp. Location updates resume when you return to Comm-Connect; the SOS stays active while you are away.</Text>
+              {(activeSos?.location?.emergencyContacts || []).map((contact, index) => (
+                <TouchableOpacity key={`${contact.phone}-${index}`} accessibilityRole="button" onPress={() => shareSosOnWhatsApp(contact)} style={{ padding: 13, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Ionicons name="logo-whatsapp" size={22} color={colors.success} />
+                  <Text style={{ flex: 1, color: colors.text, fontWeight: '700' }}>WhatsApp {contact.name || contact.phone}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
           {sosActive && isValidRemoteId(sosAlertId) && (
             <TouchableOpacity

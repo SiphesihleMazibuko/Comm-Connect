@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Linking, Modal, ScrollView, Text, View, Vibration } from 'react-native';
+import { ActivityIndicator, Alert, Animated, AppState, Linking, Modal, ScrollView, Text, View, Vibration } from 'react-native';
 import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getCurrentUser, getRows, getUserProfile, subscribeToTable, updateRow } from '../../config/supabase';
+import { stopSosAlert } from '../../config/sos';
 import { useTheme } from '../context/ThemeContext';
 
 const SERVICE_CONFIG = {
@@ -171,8 +172,13 @@ export default function ResponderDashboardScreen() {
   };
 
   const subscribeToSosAlerts = (userProfile) => {
+    let disposed = false;
     const loadSosAlerts = async () => {
       try {
+        if (!userProfile?.ward_id) {
+          if (!disposed) setSosAlerts([]);
+          return;
+        }
         const filters = { emergencyType: 'sos', status: 'active' };
         if (userProfile?.ward_id) filters.ward_id = userProfile.ward_id;
 
@@ -181,14 +187,24 @@ export default function ResponderDashboardScreen() {
           order: [{ column: 'createdAt', ascending: false }],
         });
 
-        setSosAlerts(data || []);
+        if (!disposed) setSosAlerts(data || []);
       } catch (error) {
         console.error('SOS tracking listener error:', error);
       }
     };
 
     loadSosAlerts();
-    return subscribeToTable('emergencyRequests', loadSosAlerts);
+    const unsubscribe = subscribeToTable('emergencyRequests', loadSosAlerts);
+    const poll = setInterval(loadSosAlerts, 5000);
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') loadSosAlerts();
+    });
+    return () => {
+      disposed = true;
+      clearInterval(poll);
+      unsubscribe?.();
+      appState.remove();
+    };
   };
 
   const updateDispatchStatus = async (dispatchId, newStatus) => {
@@ -217,6 +233,23 @@ export default function ResponderDashboardScreen() {
     } finally {
       setUpdatingId(null);
     }
+  };
+
+  const stopResidentSos = (alert) => {
+    Alert.alert('Stop SOS?', `Confirm that ${alert.userName || 'the resident'} no longer needs this SOS.`, [
+      { text: 'Keep Active', style: 'cancel' },
+      { text: 'Stop SOS', style: 'destructive', onPress: async () => {
+        setUpdatingId(alert.id);
+        try {
+          await stopSosAlert(alert.id);
+          setSosAlerts((previous) => previous.filter((row) => row.id !== alert.id));
+        } catch (error) {
+          Alert.alert('SOS Still Active', error?.message || 'Could not stop this SOS. Please try again.');
+        } finally {
+          setUpdatingId(null);
+        }
+      } },
+    ]);
   };
 
   const openDispatchDirections = (dispatch) => {
@@ -468,6 +501,9 @@ export default function ResponderDashboardScreen() {
             </TouchableOpacity>
           )}
         </View>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Stop SOS for ${alert.userName || 'resident'}`} disabled={updatingId === alert.id} onPress={() => stopResidentSos(alert)} style={{ marginTop: 14, padding: 14, borderRadius: 12, backgroundColor: colors.error, alignItems: 'center', opacity: updatingId === alert.id ? 0.6 : 1 }}>
+          {updatingId === alert.id ? <ActivityIndicator color="#FFFFFF" /> : <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>Stop SOS</Text>}
+        </TouchableOpacity>
       </View>
     );
   };
