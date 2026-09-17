@@ -196,7 +196,7 @@ export default function SettingsScreen() {
     }
 
     if (!contactDraft.phone.trim()) {
-      Alert.alert('Missing Phone Number', 'Please enter the phone number that should receive the SOS SMS.');
+      Alert.alert('Missing Phone Number', 'Please enter the WhatsApp phone number that should receive the SOS message.');
       return;
     }
 

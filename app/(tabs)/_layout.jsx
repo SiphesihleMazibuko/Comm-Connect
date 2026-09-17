@@ -208,8 +208,6 @@ export default function TabLayout() {
   const dutyIcon =
     createTabIcon('people-circle');
   
-  const auditLogsIcon =
-  createTabIcon('receipt');
 
   const settingsIcon =
     createTabIcon('settings');
@@ -451,19 +449,6 @@ export default function TabLayout() {
             approvalsIcon,
         }}
       />
-
-      {/* ========================================
-    COMMUNITY LEADER AUDIT LOGS
-======================================== */}
-
-<Tabs.Screen
-  name="auditlogs"
-  options={{
-    title: 'Audit',
-    href: isLeader ? undefined : null,
-    tabBarIcon: auditLogsIcon,
-  }}
-/>
 
       {/* ========================================================
           SETTINGS

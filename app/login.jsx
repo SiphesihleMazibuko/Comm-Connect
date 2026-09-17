@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
@@ -13,6 +14,7 @@ const OTP_LENGTH = 6;
 
 export default function LoginScreen() {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [countryCodes, setCountryCodes] = useState(FALLBACK_COUNTRY_CODES);
   const [selectedCountry, setSelectedCountry] = useState(getDefaultCountryCode());
@@ -26,7 +28,38 @@ export default function LoginScreen() {
   const [step, setStep] = useState('phone');
 
   const otpRefs = useRef([]);
+  const scrollRef = useRef(null);
+  const keyboardVisible = useRef(false);
+  const focusFrame = useRef(null);
   const filteredCountryCodes = searchCountryCodes(countryCodes, countrySearch);
+
+  const revealFocusedInput = useCallback(() => {
+    if (Platform.OS === 'web' || !keyboardVisible.current) return;
+    if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
+    focusFrame.current = requestAnimationFrame(() => {
+      focusFrame.current = null;
+      const input = TextInput.State.currentlyFocusedInput();
+      if (input) {
+        scrollRef.current?.scrollResponderScrollNativeHandleToKeyboard(input, 24, true);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => {
+      keyboardVisible.current = true;
+      revealFocusedInput();
+    });
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      keyboardVisible.current = false;
+      if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+      if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
+    };
+  }, [revealFocusedInput]);
 
   useEffect(() => {
     let isMounted = true;
@@ -192,13 +225,16 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24, paddingTop: 40, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-       <View style={{ flex: 1, flexDirection: 'row' }}>
-
-      <View
-  style={{flex: 1,backgroundColor: colors.background,}}
->
-  <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{flexGrow: 1,paddingBottom: 30,}}>
+      <ScrollView
+        ref={scrollRef}
+        style={{ flex: 1 }}
+        onLayout={revealFocusedInput}
+        onContentSizeChange={revealFocusedInput}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        contentContainerStyle={{ flexGrow: 1, padding: 24, paddingTop: Math.max(40, insets.top), paddingBottom: Math.max(40, insets.bottom + 24) }}
+        showsVerticalScrollIndicator={false}
+      >
     <View
       style={{width: '100%', height: 430,backgroundColor: colors.primaryLight, borderTopLeftRadius: 45, borderTopRightRadius: 45,
         overflow: 'hidden',}}>
@@ -231,6 +267,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             <TextInput style={[inputStyle,{flex: 1,minHeight: 52,},]}
+              onFocus={revealFocusedInput}
               placeholder="81 234 5678" placeholderTextColor={colors.inputPlaceholder} selectionColor={colors.accent} value={phoneNumber} onChangeText={setPhoneNumber}
               keyboardType="phone-pad" autoComplete="tel" autoCorrect={false}editable={!loading}/></View>
 
@@ -239,6 +276,7 @@ export default function LoginScreen() {
               <TextInput style={{backgroundColor: colors.surfaceRaised,borderRadius: 10,padding: 12,margin: 10,borderWidth: 1,borderColor: colors.border,color: colors.text,
                   minHeight: 46,}}
                 placeholder="Search country or code"
+                onFocus={revealFocusedInput}
                 placeholderTextColor={colors.inputPlaceholder}
                 selectionColor={colors.accent}
                 value={countrySearch}
@@ -271,7 +309,7 @@ export default function LoginScreen() {
             <Ionicons name="information-circle-outline"size={16}color={colors.textLight}/>
 
             <Text style={{fontSize: 12,color: colors.textLight,flex: 1,lineHeight: 18,}}>
-              Don't include the country code or leading zero.</Text>
+              Don&apos;t include the country code or leading zero.</Text>
           </View>
           </>) : (
 
@@ -287,7 +325,8 @@ export default function LoginScreen() {
 
           <View style={{flexDirection: 'row',justifyContent: 'center',gap: 8,marginBottom: 18,}}>{otp.map((digit, index) => (
               <TextInput key={index} ref={(ref) => {otpRefs.current[index] = ref;}}
-                style={{width: 45,height: 56,backgroundColor: colors.inputBackground,borderRadius: 12,borderWidth: digit ? 2 : 1,borderColor: digit? colors.accent
+                onFocus={revealFocusedInput}
+                style={{flex: 1,minWidth: 0,maxWidth: 45,height: 56,backgroundColor: colors.inputBackground,borderRadius: 12,borderWidth: digit ? 2 : 1,borderColor: digit? colors.accent
                 : colors.inputBorder,fontSize: 21,fontWeight: '800',textAlign: 'center',color: colors.text,}}
                 value={digit} onChangeText={(value) =>handleOtpChange(value, index)}onKeyPress={(event) =>handleOtpKeyPress(event, index)}keyboardType="number-pad"
                 selectionColor={colors.accent}maxLength={6}selectTextOnFocus autoFocus={index === 0}editable={!loading}/>))}
@@ -311,7 +350,7 @@ export default function LoginScreen() {
 
 
       <View style={{flexDirection: 'row',justifyContent: 'center',alignItems: 'center',gap: 4,}}>
-        <Text style={{color: colors.textLight, fontSize: 14,}}> Don't have an account?</Text>
+        <Text style={{color: colors.textLight, fontSize: 14,}}> Don&apos;t have an account?</Text>
 
         <TouchableOpacity onPress={() => router.push('/signup')} disabled={loading}>
           <Text style={{fontWeight: '800',color: colors.accent, fontSize: 14,}}> Sign Up</Text>
@@ -325,10 +364,6 @@ export default function LoginScreen() {
           Your phone number is securely verified.</Text>
       </View>
     </View>
-  </ScrollView>
-</View>
-                      
-</View>   
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -60,8 +60,10 @@ const getAudioPlayer = async () => {
   if (Platform.OS === 'web') return null;
 
   if (!audioPlayerPromise) {
-    audioPlayerPromise = import('expo-audio')
-      .then(async ({ createAudioPlayer, setAudioModeAsync }) => {
+    audioPlayerPromise = Promise.resolve()
+      .then(async () => {
+        // Resolve locally so tapping SOS never downloads a development bundle.
+        const { createAudioPlayer, setAudioModeAsync } = require('expo-audio');
         await setAudioModeAsync({
           playsInSilentMode: false,
           interruptionMode: 'mixWithOthers',
