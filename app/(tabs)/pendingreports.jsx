@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import ScreenHeader from '../../components/ScreenHeader';
 import CrimeReportsModal from '../../components/crime-reports-modal';
 import { getCurrentUser, getRows, getUserProfile, insertRow, updateRow } from '../../config/supabase';
+import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
 
 const EMERGENCY_SERVICES = [
@@ -100,6 +101,7 @@ const StatsGauge = ({ title, value, subtitle, icon, colors, isDark, onPress }) =
 
 export default function PendingReportsScreen() {
   const { colors, isDark } = useTheme();
+  const { t } = useLanguage();
 
   const [reports, setReports] = useState([]);
   const [wardReports, setWardReports] = useState([]);
@@ -170,11 +172,11 @@ export default function PendingReportsScreen() {
     return CRIME_CATEGORIES.some(({ id }) => id === category) ? category : 'other_crime';
   };
 
-  const getCrimeCategoryLabel = (value) => CRIME_CATEGORIES.find((category) => category.id === value)?.label || 'Other Crime';
+  const getCrimeCategoryLabel = (value) => t(CRIME_CATEGORIES.find((category) => category.id === value)?.label || 'Other Crime');
 
   const getReportOtherCategory = (report) => report?.otherCategory || report?.location?.otherCategory || 'other_event';
 
-  const getOtherCategoryLabel = (value) => OTHER_CATEGORIES.find((category) => category.id === value)?.label || 'Other';
+  const getOtherCategoryLabel = (value) => t(OTHER_CATEGORIES.find((category) => category.id === value)?.label || 'Other');
 
   const getReportPhotos = (report) => Array.isArray(report?.photoUrls) ? report.photoUrls.filter(Boolean) : [];
 
@@ -189,11 +191,11 @@ export default function PendingReportsScreen() {
 
   const getReportTypeLabel = (type) => {
     switch (type) {
-      case 'crime': return 'Crime';
-      case 'hazard': return 'Emergency';
-      case 'infrastructure': return 'Infrastructure';
-      case 'other': return 'Community';
-      default: return 'Incident';
+      case 'crime': return t('Crime');
+      case 'hazard': return t('Emergency');
+      case 'infrastructure': return t('Infrastructure');
+      case 'other': return t('Community');
+      default: return t('Incident');
     }
   };
 
@@ -247,10 +249,10 @@ export default function PendingReportsScreen() {
 
       const communityPostTitle =
         reportToApprove.reportType === 'crime' && reportCrimeCategory !== 'other_crime' && crimeCategoryLabel
-          ? `${crimeCategoryLabel.toUpperCase()} ALERT: Verified Incident`
+          ? `${crimeCategoryLabel.toUpperCase()} ${t('ALERT: Verified Incident')}`
           : reportToApprove.reportType === 'other' && reportOtherCategory !== 'other_event' && otherCategoryLabel
-          ? `${otherCategoryLabel.toUpperCase()} UPDATE: Verified Incident`
-          : `${(reportToApprove.reportType?.toUpperCase() || 'INCIDENT')} ALERT: Verified Incident`;
+          ? `${otherCategoryLabel.toUpperCase()} ${t('UPDATE: Verified Incident')}`
+          : `${t(reportToApprove.reportType?.toUpperCase() || 'INCIDENT')} ${t('ALERT: Verified Incident')}`;
 
       await updateRow('reports', reportToApprove.id, {
         status: 'approved',
@@ -264,7 +266,7 @@ export default function PendingReportsScreen() {
         title: communityPostTitle,
         description: reportToApprove.description,
         createdBy: user?.id,
-        createdByName: 'Community Safety Team',
+        createdByName: t('Community Safety Team'),
         createdAt: now,
         status: 'approved',
         priority: 'high',
@@ -295,11 +297,11 @@ export default function PendingReportsScreen() {
 
       await fetchPendingReports(userProfile);
 
-      const serviceNames = chosenServices.length > 0 ? chosenServices.map((service) => service.label).join(', ') : 'No services';
+      const serviceNames = chosenServices.length > 0 ? chosenServices.map((service) => t(service.label)).join(', ') : t('No services');
 
-      Alert.alert('Report Approved', `Dispatched: ${serviceNames}`);
+      Alert.alert(t('Report Approved'), `${t('Dispatched')}: ${serviceNames}`);
     } catch (error) {
-      Alert.alert('Error', 'Error approving report. Please try again.');
+      Alert.alert(t('Error'), t('Error approving report. Please try again.'));
       console.error('Error approving report:', error);
     } finally {
       setDispatching(false);
@@ -315,9 +317,9 @@ export default function PendingReportsScreen() {
 
       await fetchPendingReports(userProfile);
 
-      Alert.alert('Report Rejected', 'The report has been rejected.');
+      Alert.alert(t('Report Rejected'), t('The report has been rejected.'));
     } catch (error) {
-      Alert.alert('Error', 'Error rejecting report.');
+      Alert.alert(t('Error'), t('Error rejecting report.'));
       console.error('Error rejecting report:', error);
     }
   };
@@ -354,15 +356,15 @@ export default function PendingReportsScreen() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
                     <Text style={{ color: colors.text, fontSize: 16, fontWeight: '800' }}>{typeLabel}</Text>
                     <View style={{ paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, backgroundColor: colors.accentLight }}>
-                      <Text style={{ color: colors.accent, fontSize: 9, fontWeight: '800' }}>PENDING</Text>
+                      <Text style={{ color: colors.accent, fontSize: 9, fontWeight: '800' }}>{t('PENDING')}</Text>
                     </View>
                   </View>
 
                   {categoryLabel && <Text style={{ color: colors.textLight, fontSize: 12, marginTop: 4 }}>{categoryLabel}</Text>}
 
                   <Text style={{ color: colors.textLight, fontSize: 11, marginTop: 5 }}>
-                    {report.createdAt ? new Date(report.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'Just now'}
-                    {report.ward_id ? `  •  Ward ${report.ward_id}` : ''}
+                    {report.createdAt ? new Date(report.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : t('Just now')}
+                    {report.ward_id ? `  -  ${t('Ward')} ${report.ward_id}` : ''}
                   </Text>
                 </View>
               </View>
@@ -372,7 +374,7 @@ export default function PendingReportsScreen() {
               </Text>
 
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 16, paddingTop: 13, borderTopWidth: 1, borderTopColor: colors.border }}>
-                <Text style={{ flex: 1, color: colors.textLight, fontSize: 11, fontWeight: '600' }}>Tap to view details</Text>
+                <Text style={{ flex: 1, color: colors.textLight, fontSize: 11, fontWeight: '600' }}>{t('Tap to view details')}</Text>
 
                 <TouchableOpacity onPress={() => openDispatchModal(report)} style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: colors.success, justifyContent: 'center', alignItems: 'center', marginRight: 8 }}>
                   <Ionicons name="checkmark" size={21} color="#FFFFFF" />
@@ -395,7 +397,7 @@ export default function PendingReportsScreen() {
         <View style={{ width: 72, height: 72, borderRadius: 24, backgroundColor: colors.accentLight, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
-        <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600', marginTop: 14 }}>Loading reports...</Text>
+        <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600', marginTop: 14 }}>{t('Loading reports...')}</Text>
       </View>
     );
   }
@@ -405,9 +407,9 @@ export default function PendingReportsScreen() {
       <Animated.ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 30 }} showsVerticalScrollIndicator={false}>
         <Animated.View style={{ opacity: fadeAnim }}>
           <ScreenHeader
-            title="Pending Reports"
-            subtitle={reports.length === 1 ? '1 report awaiting review' : `${reports.length} reports awaiting review`}
-            meta={userProfile?.ward_number ? `Ward ${userProfile.ward_number}` : undefined}
+            title={t('Pending Reports')}
+            subtitle={t('{{count}} report awaiting review', { count: reports.length })}
+            meta={userProfile?.ward_number ? `${t('Ward')} ${userProfile.ward_number}` : undefined}
             icon="checkmark-done-circle"
           />
         </Animated.View>
@@ -419,12 +421,12 @@ export default function PendingReportsScreen() {
                 <Ionicons name="shield-checkmark" size={24} color="#FFFFFF" />
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>Community Safety Review</Text>
-                <Text style={{ color: '#FFFFFF', opacity: 0.78, fontSize: 11, marginTop: 3 }}>Review reports carefully before approval.</Text>
+                <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>{t('Community Safety Review')}</Text>
+                <Text style={{ color: '#FFFFFF', opacity: 0.78, fontSize: 11, marginTop: 3 }}>{t('Review reports carefully before approval.')}</Text>
               </View>
               <View style={{ alignItems: 'center' }}>
                 <Text style={{ color: '#FFFFFF', fontSize: 22, fontWeight: '900' }}>{reports.length}</Text>
-                <Text style={{ color: '#FFFFFF', opacity: 0.75, fontSize: 9, fontWeight: '700' }}>PENDING</Text>
+                <Text style={{ color: '#FFFFFF', opacity: 0.75, fontSize: 9, fontWeight: '700' }}>{t('PENDING')}</Text>
               </View>
             </View>
           </LinearGradient>
@@ -437,26 +439,26 @@ export default function PendingReportsScreen() {
                 <Ionicons name="stats-chart" size={20} color={colors.accent} />
               </View>
               <View style={{ flex: 1, marginLeft: 11 }}>
-                <Text style={{ color: colors.text, fontSize: 17, fontWeight: '900' }}>Crime Statistics</Text>
-                <Text style={{ color: colors.textLight, fontSize: 11, marginTop: 2 }}>Live activity reported in your ward</Text>
+                <Text style={{ color: colors.text, fontSize: 17, fontWeight: '900' }}>{t('Crime Statistics')}</Text>
+                <Text style={{ color: colors.textLight, fontSize: 11, marginTop: 2 }}>{t('Live activity reported in your ward')}</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={{ color: colors.accent, fontSize: 22, fontWeight: '900' }}>{totalCrimeReports}</Text>
-                <Text style={{ color: colors.textLight, fontSize: 9, fontWeight: '800' }}>TOTAL</Text>
+                <Text style={{ color: colors.textLight, fontSize: 9, fontWeight: '800' }}>{t('TOTAL')}</Text>
               </View>
             </View>
 
             <Text style={{ color: colors.textLight, fontSize: 10, lineHeight: 16, marginBottom: 12 }}>
-              Tap a category to view reports and reporter details. Each gauge shows reports out of 50.
+              {t('Tap a category to view reports and reporter details. Each gauge shows reports out of 50.')}
             </Text>
 
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
               {crimeMatrix.map((category) => (
                 <StatsGauge
                   key={category.id}
-                  title={category.label}
+                  title={t(category.label)}
                   value={category.reports.length}
-                  subtitle="Tap to view reports"
+                  subtitle={t('Tap to view reports')}
                   onPress={() => setSelectedCrimeCategory(category.id)}
                   icon={category.icon}
                   colors={colors}
@@ -469,7 +471,7 @@ export default function PendingReportsScreen() {
 
         <View style={{ paddingHorizontal: 16, marginTop: 20 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-            <Text style={{ flex: 1, color: colors.text, fontSize: 17, fontWeight: '800' }}>Reports to Review</Text>
+            <Text style={{ flex: 1, color: colors.text, fontSize: 17, fontWeight: '800' }}>{t('Reports to Review')}</Text>
             <View style={{ backgroundColor: colors.accentLight, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10 }}>
               <Text style={{ color: colors.accent, fontSize: 11, fontWeight: '800' }}>{reports.length}</Text>
             </View>
@@ -480,9 +482,9 @@ export default function PendingReportsScreen() {
               <LinearGradient colors={[colors.accentLight, colors.surfaceRaised]} style={{ width: 82, height: 82, borderRadius: 26, justifyContent: 'center', alignItems: 'center' }}>
                 <Ionicons name="checkmark-circle" size={52} color={colors.accent} />
               </LinearGradient>
-              <Text style={{ color: colors.text, fontSize: 19, fontWeight: '900', marginTop: 18 }}>All Clear</Text>
+              <Text style={{ color: colors.text, fontSize: 19, fontWeight: '900', marginTop: 18 }}>{t('All Clear')}</Text>
               <Text style={{ color: colors.textLight, fontSize: 13, textAlign: 'center', lineHeight: 20, marginTop: 7, maxWidth: 260 }}>
-                There are currently no reports waiting for review in your ward.
+                {t('There are currently no reports waiting for review in your ward.')}
               </Text>
             </View>
           ) : (
@@ -494,7 +496,7 @@ export default function PendingReportsScreen() {
       {activeCrimeCategory && (
         <CrimeReportsModal
           key={activeCrimeCategory.id}
-          category={activeCrimeCategory}
+          category={{ ...activeCrimeCategory, label: t(activeCrimeCategory.label) }}
           reports={activeCrimeCategory.reports}
           colors={colors}
           onClose={() => setSelectedCrimeCategory(null)}
@@ -509,8 +511,8 @@ export default function PendingReportsScreen() {
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 22, paddingBottom: 34 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 22 }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.textLight, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 }}>REPORT REVIEW</Text>
-                  <Text style={{ color: colors.text, fontSize: 23, fontWeight: '900', marginTop: 4 }}>Report Details</Text>
+                  <Text style={{ color: colors.textLight, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 }}>{t('REPORT REVIEW')}</Text>
+                  <Text style={{ color: colors.text, fontSize: 23, fontWeight: '900', marginTop: 4 }}>{t('Report Details')}</Text>
                 </View>
                 <TouchableOpacity onPress={() => setDetailModalVisible(false)} style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border }}>
                   <Ionicons name="close" size={22} color={colors.textLight} />
@@ -525,7 +527,7 @@ export default function PendingReportsScreen() {
                         <Ionicons name={getReportIcon(selectedReport.reportType)} size={24} color={colors.accent} />
                       </View>
                       <View style={{ flex: 1, marginLeft: 12 }}>
-                        <Text style={{ color: colors.textLight, fontSize: 10, fontWeight: '800' }}>INCIDENT TYPE</Text>
+                        <Text style={{ color: colors.textLight, fontSize: 10, fontWeight: '800' }}>{t('INCIDENT TYPE')}</Text>
                         <Text style={{ color: colors.text, fontSize: 17, fontWeight: '900', marginTop: 3 }}>
                           {getReportTypeLabel(selectedReport.reportType)}
                         </Text>
@@ -536,21 +538,21 @@ export default function PendingReportsScreen() {
                         )}
                       </View>
                       <View style={{ paddingHorizontal: 8, paddingVertical: 5, borderRadius: 9, backgroundColor: colors.accentLight }}>
-                        <Text style={{ color: colors.accent, fontSize: 9, fontWeight: '900' }}>PENDING</Text>
+                        <Text style={{ color: colors.accent, fontSize: 9, fontWeight: '900' }}>{t('PENDING')}</Text>
                       </View>
                     </View>
                   </LinearGradient>
 
                   <View style={{ marginBottom: 20 }}>
-                    <Text style={{ color: colors.textLight, fontSize: 10, fontWeight: '900', letterSpacing: 0.6, marginBottom: 7 }}>DESCRIPTION</Text>
+                    <Text style={{ color: colors.textLight, fontSize: 10, fontWeight: '900', letterSpacing: 0.6, marginBottom: 7 }}>{t('DESCRIPTION')}</Text>
                     <View style={{ backgroundColor: colors.background, borderRadius: 16, padding: 15, borderWidth: 1, borderColor: colors.border }}>
-                      <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22 }}>{selectedReport.description || 'No description provided.'}</Text>
+                      <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22 }}>{selectedReport.description || t('No description provided.')}</Text>
                     </View>
                   </View>
 
                   {getReportPhotos(selectedReport).length > 0 && (
                     <View style={{ marginBottom: 20 }}>
-                      <Text style={{ color: colors.textLight, fontSize: 10, fontWeight: '900', letterSpacing: 0.6, marginBottom: 9 }}>ATTACHED PHOTOS</Text>
+                      <Text style={{ color: colors.textLight, fontSize: 10, fontWeight: '900', letterSpacing: 0.6, marginBottom: 9 }}>{t('ATTACHED PHOTOS')}</Text>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         <View style={{ flexDirection: 'row', gap: 10 }}>
                           {getReportPhotos(selectedReport).map((uri, index) => (
@@ -562,16 +564,16 @@ export default function PendingReportsScreen() {
                   )}
 
                   <View style={{ marginBottom: 22 }}>
-                    <Text style={{ color: colors.textLight, fontSize: 10, fontWeight: '900', letterSpacing: 0.6, marginBottom: 9 }}>LOCATION</Text>
+                    <Text style={{ color: colors.textLight, fontSize: 10, fontWeight: '900', letterSpacing: 0.6, marginBottom: 9 }}>{t('LOCATION')}</Text>
                     <View style={{ backgroundColor: colors.background, borderRadius: 16, padding: 15, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center' }}>
                       <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: colors.accentLight, justifyContent: 'center', alignItems: 'center' }}>
                         <Ionicons name="location" size={20} color={colors.accent} />
                       </View>
                       <View style={{ flex: 1, marginLeft: 11 }}>
                         <Text style={{ color: colors.text, fontSize: 13, fontWeight: '700' }}>
-                          {selectedReport.location?.latitude ?? 'Unknown'}, {selectedReport.location?.longitude ?? 'Unknown'}
+                          {selectedReport.location?.latitude ?? t('Unknown')}, {selectedReport.location?.longitude ?? t('Unknown')}
                         </Text>
-                        {selectedReport.ward_id && <Text style={{ color: colors.textLight, fontSize: 11, marginTop: 3 }}>Ward {selectedReport.ward_id}</Text>}
+                        {selectedReport.ward_id && <Text style={{ color: colors.textLight, fontSize: 11, marginTop: 3 }}>{t('Ward')} {selectedReport.ward_id}</Text>}
                       </View>
                     </View>
                   </View>
@@ -579,12 +581,12 @@ export default function PendingReportsScreen() {
                   <View style={{ gap: 10 }}>
                     <TouchableOpacity onPress={() => openDispatchModal(selectedReport)} style={{ backgroundColor: colors.success, borderRadius: 16, paddingVertical: 15, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
                       <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-                      <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '900' }}>Approve Report</Text>
+                      <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '900' }}>{t('Approve Report')}</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity onPress={() => handleReject(selectedReport.id)} style={{ backgroundColor: colors.error, borderRadius: 16, paddingVertical: 15, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
                       <Ionicons name="close-circle" size={20} color="#FFFFFF" />
-                      <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '900' }}>Reject Report</Text>
+                      <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '900' }}>{t('Reject Report')}</Text>
                     </TouchableOpacity>
                   </View>
                 </>
@@ -604,16 +606,16 @@ export default function PendingReportsScreen() {
                 <Ionicons name="radio" size={22} color="#FFFFFF" />
               </LinearGradient>
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900' }}>Dispatch Services</Text>
-                <Text style={{ color: colors.textLight, fontSize: 11, marginTop: 2 }}>Choose who should respond</Text>
+                <Text style={{ color: colors.text, fontSize: 20, fontWeight: '900' }}>{t('Dispatch Services')}</Text>
+                <Text style={{ color: colors.textLight, fontSize: 11, marginTop: 2 }}>{t('Choose who should respond')}</Text>
               </View>
             </View>
 
             {reportToApprove && (
               <View style={{ backgroundColor: colors.background, borderRadius: 16, padding: 13, marginTop: 18, borderWidth: 1, borderColor: colors.border }}>
-                <Text style={{ color: colors.textLight, fontSize: 9, fontWeight: '900' }}>VERIFYING</Text>
+                <Text style={{ color: colors.textLight, fontSize: 9, fontWeight: '900' }}>{t('VERIFYING')}</Text>
                 <Text numberOfLines={2} style={{ color: colors.text, fontSize: 13, fontWeight: '700', marginTop: 4 }}>
-                  {reportToApprove.description || 'Community incident report'}
+                  {reportToApprove.description || t('Community incident report')}
                 </Text>
               </View>
             )}
@@ -632,8 +634,8 @@ export default function PendingReportsScreen() {
                       <Ionicons name={service.icon} size={21} color={isSelected ? '#FFFFFF' : colors.accent} />
                     </View>
                     <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={{ color: colors.text, fontSize: 14, fontWeight: '800' }}>{service.label}</Text>
-                      <Text style={{ color: colors.textLight, fontSize: 10, marginTop: 2 }}>Community emergency response</Text>
+                      <Text style={{ color: colors.text, fontSize: 14, fontWeight: '800' }}>{t(service.label)}</Text>
+                      <Text style={{ color: colors.textLight, fontSize: 10, marginTop: 2 }}>{t('Community emergency response')}</Text>
                     </View>
                     <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: isSelected ? colors.accent : colors.border, backgroundColor: isSelected ? colors.accent : 'transparent', justifyContent: 'center', alignItems: 'center' }}>
                       {isSelected && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
@@ -647,14 +649,14 @@ export default function PendingReportsScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.accentLight, borderRadius: 14, padding: 11, marginTop: 14, borderWidth: 1, borderColor: colors.border }}>
                 <Ionicons name="information-circle" size={18} color={colors.accent} />
                 <Text style={{ flex: 1, color: colors.text, fontSize: 11, lineHeight: 17, marginLeft: 8 }}>
-                  You can approve this report without dispatching a service. It will still appear on the community feed.
+                  {t('You can approve this report without dispatching a service. It will still appear on the community feed.')}
                 </Text>
               </View>
             )}
 
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
               <TouchableOpacity onPress={() => setDispatchModalVisible(false)} disabled={dispatching} style={{ flex: 1, backgroundColor: colors.background, borderRadius: 15, paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: colors.border }}>
-                <Text style={{ color: colors.text, fontSize: 13, fontWeight: '800' }}>Cancel</Text>
+                <Text style={{ color: colors.text, fontSize: 13, fontWeight: '800' }}>{t('Cancel')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity onPress={handleConfirmApprove} disabled={dispatching} style={{ flex: 1.8, backgroundColor: colors.accent, borderRadius: 15, paddingVertical: 15, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7, opacity: dispatching ? 0.7 : 1 }}>
@@ -664,7 +666,7 @@ export default function PendingReportsScreen() {
                   <>
                     <Ionicons name={selectedServices.length > 0 ? 'radio' : 'checkmark-circle'} size={19} color="#FFFFFF" />
                     <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '900' }}>
-                      {selectedServices.length > 0 ? `Approve & Dispatch (${selectedServices.length})` : 'Approve Only'}
+                      {selectedServices.length > 0 ? t('Approve & Dispatch ({{count}})', { count: selectedServices.length }) : t('Approve Only')}
                     </Text>
                   </>
                 )}

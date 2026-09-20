@@ -11,6 +11,7 @@ import {
 } from '../../config/supabase';
 
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 
 function GlassTabBackground({ colors, isDark }) {
   return (
@@ -98,6 +99,7 @@ function GlassTabIcon({
 
 export default function TabLayout() {
   const { colors, isDark } = useTheme();
+  const { t } = useLanguage();
 
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -178,14 +180,18 @@ export default function TabLayout() {
   // TAB ICONS
   // ============================================================
 
-  const createTabIcon = (name) => (props) => (
-    <GlassTabIcon
-      name={name}
-      {...props}
-      colors={colors}
-      isDark={isDark}
-    />
-  );
+  const createTabIcon = (name) => {
+    const TabIcon = (props) => (
+      <GlassTabIcon
+        name={name}
+        {...props}
+        colors={colors}
+        isDark={isDark}
+      />
+    );
+
+    return TabIcon;
+  };
 
   const communityFeedIcon =
     createTabIcon('newspaper');
@@ -323,7 +329,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="communityfeed"
         options={{
-          title: 'Home',
+          title: t('Home'),
 
           href:
             isResident ||
@@ -343,7 +349,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="emergencyResponderDashboard"
         options={{
-          title: 'Responder',
+          title: t('Responder'),
 
           href:
             isCps
@@ -362,7 +368,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="emergencyrequest"
         options={{
-          title: 'Emergencies',
+          title: t('Emergencies'),
 
           // Keep hidden from the resident/leader tab bar.
           // Responders access this from their own navigation.
@@ -380,7 +386,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="cpsmembers"
         options={{
-          title: 'On Duty',
+          title: t('On Duty'),
 
           href:
             isCps
@@ -419,7 +425,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="incidentreport"
         options={{
-          title: 'Report',
+          title: t('Report'),
 
           href:
             isResident
@@ -438,7 +444,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="pendingreports"
         options={{
-          title: 'Approvals',
+          title: t('Approvals'),
 
           href:
             isLeader
@@ -458,7 +464,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
+          title: t('Settings'),
 
           href: undefined,
 

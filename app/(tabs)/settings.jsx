@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 
 import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
+import LanguagePicker from '../../components/LanguagePicker';
 import ScreenHeader from '../../components/ScreenHeader';
 
 import { deleteRow, getCurrentUser, getRows, getSupabaseClient, getUserProfile, insertRow, updateRow } from '../../config/supabase';
 import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode, searchCountryCodes } from '../../Utils/countryCodes';
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 
 const EMPTY_CONTACT = { name: '', relationship: '', phone: '' };
 
@@ -42,9 +44,27 @@ const getRoleLabel = (role) => {
   return 'Resident';
 };
 
+function SettingItem({ colors, icon, title, subtitle, children }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+      <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+        <Ionicons name={icon} size={21} color={colors.primary} />
+      </View>
+
+      <View style={{ flex: 1, paddingRight: 10 }}>
+        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{title}</Text>
+        {subtitle ? <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 4, lineHeight: 17 }}>{subtitle}</Text> : null}
+      </View>
+
+      {children}
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { colors, isDark, toggleTheme } = useTheme();
+  const { languageLabel, t } = useLanguage();
 
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
@@ -55,6 +75,7 @@ export default function SettingsScreen() {
   const [contactDraft, setContactDraft] = useState(EMPTY_CONTACT);
   const [savingContact, setSavingContact] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
 
   const [countryCodes, setCountryCodes] = useState(FALLBACK_COUNTRY_CODES);
   const [selectedCountry, setSelectedCountry] = useState(getDefaultCountryCode());
@@ -66,17 +87,7 @@ export default function SettingsScreen() {
 
   const filteredCountryCodes = searchCountryCodes(countryCodes, countrySearch);
 
-  useEffect(() => {
-    countryCodesMountedRef.current = true;
-    loadUserSettings();
-    loadCountryCodes();
-
-    return () => {
-      countryCodesMountedRef.current = false;
-    };
-  }, []);
-
-  const loadCountryCodes = async () => {
+  async function loadCountryCodes() {
     setLoadingCountryCodes(true);
 
     try {
@@ -96,7 +107,7 @@ export default function SettingsScreen() {
     } finally {
       if (countryCodesMountedRef.current) setLoadingCountryCodes(false);
     }
-  };
+  }
 
   const toggleCountryPicker = () => {
     if (showCountryPicker) setCountrySearch('');
@@ -109,7 +120,7 @@ export default function SettingsScreen() {
     setShowCountryPicker(false);
   };
 
-  const loadUserSettings = async () => {
+  async function loadUserSettings() {
     try {
       setLoading(true);
 
@@ -136,9 +147,9 @@ export default function SettingsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const loadEmergencyContacts = async (userId, profile = userData) => {
+  async function loadEmergencyContacts(userId, profile = userData) {
     if (!userId) return [];
 
     const contacts = await getRows('emergency_contacts', {
@@ -152,7 +163,20 @@ export default function SettingsScreen() {
     setEmergencyContacts(nextContacts);
 
     return nextContacts;
-  };
+  }
+
+  useEffect(() => {
+    countryCodesMountedRef.current = true;
+
+    Promise.resolve().then(() => {
+      loadUserSettings();
+      loadCountryCodes();
+    });
+
+    return () => {
+      countryCodesMountedRef.current = false;
+    };
+  }, []);
 
   const updateSetting = async (key, value) => {
     if (!user?.id) return;
@@ -322,26 +346,11 @@ export default function SettingsScreen() {
     );
   };
 
-  const SettingItem = ({ icon, title, subtitle, children }) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-      <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-        <Ionicons name={icon} size={21} color={colors.primary} />
-      </View>
-
-      <View style={{ flex: 1, paddingRight: 10 }}>
-        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{title}</Text>
-        {subtitle ? <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 4, lineHeight: 17 }}>{subtitle}</Text> : null}
-      </View>
-
-      {children}
-    </View>
-  );
-
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={{ marginTop: 12, color: colors.textLight, fontSize: 14 }}>Loading settings...</Text>
+        <Text style={{ marginTop: 12, color: colors.textLight, fontSize: 14 }}>{t('Loading settings...')}</Text>
       </View>
     );
   }
@@ -357,37 +366,37 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <ScreenHeader
-          title={fullName || 'Settings'}
-          subtitle={userData?.email || 'Manage your account'}
+          title={fullName || t('Settings')}
+          subtitle={userData?.email || t('Manage your account')}
           meta={`Role: ${roleLabel}`}
           icon="person"
         />
 
         <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
           <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textLight, marginTop: 8, marginBottom: 10, letterSpacing: 0.7 }}>
-            ACCOUNT
+            {t('ACCOUNT')}
           </Text>
 
           <View style={{ backgroundColor: colors.surface, borderRadius: 18, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 16, marginBottom: 24 }}>
-            <SettingItem icon="person-outline" title="Name" subtitle={fullName || 'No name available'}>
+            <SettingItem colors={colors} icon="person-outline" title={t('Name')} subtitle={fullName || t('No name available')}>
               <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
             </SettingItem>
 
-            <SettingItem icon="mail-outline" title="Email" subtitle={userData?.email || user?.email || 'No email available'}>
+            <SettingItem colors={colors} icon="mail-outline" title={t('Email')} subtitle={userData?.email || user?.email || t('No email available')}>
               <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
             </SettingItem>
 
-            <SettingItem icon="shield-checkmark-outline" title="Account Role" subtitle={roleLabel}>
+            <SettingItem colors={colors} icon="shield-checkmark-outline" title={t('Account Role')} subtitle={t(roleLabel)}>
               <Ionicons name="checkmark-circle" size={19} color={colors.success} />
             </SettingItem>
           </View>
 
           <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textLight, marginBottom: 10, letterSpacing: 0.7 }}>
-            PREFERENCES
+            {t('PREFERENCES')}
           </Text>
 
           <View style={{ backgroundColor: colors.surface, borderRadius: 18, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 16, marginBottom: 24 }}>
-            <SettingItem icon={isDark ? 'moon' : 'sunny'} title="Dark Mode" subtitle={isDark ? 'Dark theme enabled' : 'Light theme enabled'}>
+            <SettingItem colors={colors} icon={isDark ? 'moon' : 'sunny'} title={t('Dark Mode')} subtitle={isDark ? t('Dark theme enabled') : t('Light theme enabled')}>
               <Switch
                 value={isDark}
                 onValueChange={toggleTheme}
@@ -397,7 +406,16 @@ export default function SettingsScreen() {
               />
             </SettingItem>
 
-            <SettingItem icon="eye-off-outline" title="Anonymous Reporting" subtitle="Default to anonymous when reporting incidents">
+            <SettingItem colors={colors} icon="language-outline" title={t('Language')} subtitle={languageLabel}>
+              <TouchableOpacity
+                onPress={() => setShowLanguagePicker(true)}
+                style={{ width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight }}
+              >
+                <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+              </TouchableOpacity>
+            </SettingItem>
+
+            <SettingItem colors={colors} icon="eye-off-outline" title={t('Anonymous Reporting')} subtitle={t('Default to anonymous when reporting incidents')}>
               <Switch
                 value={anonymousDefault}
                 onValueChange={toggleAnonymousDefault}
@@ -409,7 +427,7 @@ export default function SettingsScreen() {
           </View>
 
           <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textLight, marginBottom: 10, letterSpacing: 0.7 }}>
-            SOS CONTACTS
+            {t('SOS CONTACTS')}
           </Text>
 
           <View style={{ backgroundColor: colors.surface, borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 16, marginBottom: 24 }}>
@@ -419,9 +437,9 @@ export default function SettingsScreen() {
               </View>
 
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>Emergency Contacts</Text>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>{t('Emergency Contacts')}</Text>
                 <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 3, lineHeight: 17 }}>
-                  These contacts can receive your SOS emergency message.
+                  {t('These contacts can receive your SOS emergency message.')}
                 </Text>
               </View>
             </View>
@@ -430,10 +448,10 @@ export default function SettingsScreen() {
               <View style={{ backgroundColor: colors.surfaceSoft || colors.primaryLight, borderRadius: 14, padding: 18, alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: colors.border }}>
                 <Ionicons name="people-outline" size={32} color={colors.textLight} />
                 <Text style={{ color: colors.text, fontSize: 14, fontWeight: '700', marginTop: 8, textAlign: 'center' }}>
-                  No emergency contacts
+                  {t('No emergency contacts')}
                 </Text>
                 <Text style={{ color: colors.textLight, fontSize: 12, marginTop: 5, textAlign: 'center', lineHeight: 18 }}>
-                  Add at least one emergency contact before using SOS.
+                  {t('Add at least one emergency contact before using SOS.')}
                 </Text>
               </View>
             ) : (
@@ -446,7 +464,7 @@ export default function SettingsScreen() {
 
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: colors.text, fontSize: 14, fontWeight: '800' }}>{contact.name}</Text>
-                      <Text style={{ color: colors.textLight, fontSize: 12, marginTop: 3 }}>{contact.relationship || 'Emergency contact'}</Text>
+                      <Text style={{ color: colors.textLight, fontSize: 12, marginTop: 3 }}>{contact.relationship || t('Emergency contact')}</Text>
                       <Text style={{ color: colors.textLight, fontSize: 12, marginTop: 2 }}>{contact.phone}</Text>
                     </View>
 
@@ -469,7 +487,7 @@ export default function SettingsScreen() {
               style={{ backgroundColor: colors.primary, borderRadius: 13, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginTop: 3 }}
             >
               <Ionicons name="person-add" size={18} color="#FFFFFF" />
-              <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>Add Emergency Contact</Text>
+              <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>{t('Add Emergency Contact')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -483,13 +501,20 @@ export default function SettingsScreen() {
             ) : (
               <>
                 <Ionicons name="log-out-outline" size={21} color="#FFFFFF" />
-                <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '800' }}>LOGOUT</Text>
+                <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '800' }}>{t('LOGOUT')}</Text>
               </>
             )}
           </TouchableOpacity>
 
           <Text style={{ textAlign: 'center', color: colors.textLight, fontSize: 11, marginTop: 5 }}>Comm-Connect</Text>
         </View>
+
+        <LanguagePicker
+          visible={showLanguagePicker}
+          onClose={() => setShowLanguagePicker(false)}
+          title="Choose your language"
+          subtitle="Your preference is saved to your profile."
+        />
 
         <Modal
           visible={showContactModal}

@@ -9,11 +9,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import ScreenHeader from "../../components/ScreenHeader";
 import { uploadReportImages } from "../../config/mediaUpload";
 import { getCurrentUser, getRows, getUserProfile, insertRow } from "../../config/supabase";
+import { useLanguage } from "../context/LanguageContext";
 import { useTheme } from "../context/ThemeContext";
 
 export default function IncidentReportScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { t } = useLanguage();
 
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
@@ -31,25 +33,7 @@ export default function IncidentReportScreen() {
   const [loadingReports, setLoadingReports] = useState(true);
   const [showReportHistory, setShowReportHistory] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const currentUser = await getCurrentUser();
-        setUser(currentUser);
-        if (currentUser) {
-          const profile = await getUserProfile(currentUser.id);
-          setUserProfile(profile);
-          await loadUserPinpoints(currentUser);
-          await loadUserReports(currentUser);
-        }
-      } catch (error) {
-        console.error("Error loading incident report screen:", error);
-      }
-    };
-    load();
-  }, []);
-
-  const loadUserPinpoints = async (currentUser = user) => {
+  async function loadUserPinpoints(currentUser = user) {
     if (!currentUser) return;
     setLoadingPinpoints(true);
     try {
@@ -61,9 +45,9 @@ export default function IncidentReportScreen() {
     } finally {
       setLoadingPinpoints(false);
     }
-  };
+  }
 
-  const loadUserReports = async (currentUser = user) => {
+  async function loadUserReports(currentUser = user) {
     if (!currentUser) return;
     setLoadingReports(true);
     try {
@@ -77,7 +61,25 @@ export default function IncidentReportScreen() {
     } finally {
       setLoadingReports(false);
     }
-  };
+  }
+
+  useEffect(() => {
+    Promise.resolve().then(async () => {
+      try {
+        const currentUser = await getCurrentUser();
+        setUser(currentUser);
+        if (currentUser) {
+          const profile = await getUserProfile(currentUser.id);
+          setUserProfile(profile);
+          await loadUserPinpoints(currentUser);
+          await loadUserReports(currentUser);
+        }
+      } catch (error) {
+        console.error("Error loading incident report screen:", error);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pickImage = async () => {
     try {
@@ -92,7 +94,7 @@ export default function IncidentReportScreen() {
       }
     } catch (error) {
       console.error("Image picker error:", error);
-      Alert.alert("Error", "Unable to open your photo gallery. Please try again.");
+      Alert.alert(t("Error"), t("Unable to open your photo gallery. Please try again."));
     }
   };
 
@@ -100,7 +102,7 @@ export default function IncidentReportScreen() {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission needed", "Camera permission is required to take photos.");
+        Alert.alert(t("Permission needed"), t("Camera permission is required to take photos."));
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -112,7 +114,7 @@ export default function IncidentReportScreen() {
       }
     } catch (error) {
       console.error("Camera error:", error);
-      Alert.alert("Error", "Unable to open the camera. Please try again.");
+      Alert.alert(t("Error"), t("Unable to open the camera. Please try again."));
     }
   };
 
@@ -130,28 +132,28 @@ export default function IncidentReportScreen() {
     console.log("userProfile:", userProfile);
 
     if (!user) {
-      Alert.alert("Error", "You must be logged in to submit a report.");
+      Alert.alert(t("Error"), t("You must be logged in to submit a report."));
       return;
     }
     if (!userProfile?.ward_id) {
-      Alert.alert("Location Required", "Your account does not have a ward assigned. Please update your profile in Settings.", [
-        { text: "Go to Settings", onPress: () => router.push("/(tabs)/settings") },
-        { text: "Cancel", style: "cancel" }
+      Alert.alert(t("Location Required"), t("Your account does not have a ward assigned. Please update your profile in Settings."), [
+        { text: t("Go to Settings"), onPress: () => router.push("/(tabs)/settings") },
+        { text: t("Cancel"), style: "cancel" }
       ]);
       return;
     }
     if (!reportType) {
-      Alert.alert("Error", "Please select a report type.");
+      Alert.alert(t("Error"), t("Please select a report type."));
       return;
     }
     if (!description.trim()) {
-      Alert.alert("Error", "Please provide a description.");
+      Alert.alert(t("Error"), t("Please provide a description."));
       return;
     }
     if (!selectedPinpoint) {
-      Alert.alert("No Location Selected", "Please save a PinPoint address first so Community Protection Services can find you.", [
-        { text: "Go to PinPoint", onPress: () => router.push("/(tabs)/pinpoint") },
-        { text: "Cancel", style: "cancel" }
+      Alert.alert(t("No Location Selected"), t("Please save a PinPoint address first so Community Protection Services can find you."), [
+        { text: t("Go to PinPoint"), onPress: () => router.push("/(tabs)/pinpoint") },
+        { text: t("Cancel"), style: "cancel" }
       ]);
       return;
     }
@@ -201,19 +203,19 @@ export default function IncidentReportScreen() {
       setOtherCategory("funeral");
       await loadUserReports(user);
 
-      Alert.alert("Report Submitted", "Thank you for helping keep our community safe. Your report is pending review and will be approved by a community leader.", [{ text: "OK" }]);
+      Alert.alert(t("Report Submitted"), t("Thank you for helping keep our community safe. Your report is pending review and will be approved by a community leader."), [{ text: t("OK") }]);
     } catch (error) {
       console.error("Report submission error:", error);
-      Alert.alert("Error", "Failed to submit report. Please try again.", [{ text: "OK" }]);
+      Alert.alert(t("Error"), t("Failed to submit report. Please try again."), [{ text: t("OK") }]);
     } finally {
       setUploading(false);
     }
   };
 
   const getStatusLabel = (status) => {
-    if (status === "approved") return "APPROVED";
-    if (status === "rejected") return "REJECTED";
-    return "PENDING REVIEW";
+    if (status === "approved") return t("APPROVED");
+    if (status === "rejected") return t("REJECTED");
+    return t("PENDING REVIEW");
   };
 
   const getStatusColor = (status) => {
@@ -229,54 +231,54 @@ export default function IncidentReportScreen() {
   };
 
   const reportTypes = [
-    { id: "crime", label: "Crime", description: "Report criminal activity", icon: "shield", color: colors.error },
-    { id: "hazard", label: "Hazard", description: "Report a dangerous situation", icon: "warning", color: colors.warning },
-    { id: "infrastructure", label: "Infrastructure", description: "Report damaged facilities", icon: "construct", color: colors.primary },
-    { id: "other", label: "Other", description: "Community-related matter", icon: "calendar", color: colors.textLight },
+    { id: "crime", label: t("Crime"), description: t("Report criminal activity"), icon: "shield", color: colors.error },
+    { id: "hazard", label: t("Hazard"), description: t("Report a dangerous situation"), icon: "warning", color: colors.warning },
+    { id: "infrastructure", label: t("Infrastructure"), description: t("Report damaged facilities"), icon: "construct", color: colors.primary },
+    { id: "other", label: t("Other"), description: t("Community-related matter"), icon: "calendar", color: colors.textLight },
   ];
 
   const crimeCategories = [
-    { id: "theft", label: "Theft", icon: "pricetag" },
-    { id: "burglary", label: "Burglary", icon: "home" },
-    { id: "assault", label: "Assault", icon: "body" },
-    { id: "robbery", label: "Robbery", icon: "alert-circle" },
-    { id: "vandalism", label: "Vandalism", icon: "hammer" },
-    { id: "suspicious_activity", label: "Suspicious Activity", icon: "eye" },
-    { id: "other_crime", label: "Other Crime", icon: "ellipsis-horizontal" },
+    { id: "theft", label: t("Theft"), icon: "pricetag" },
+    { id: "burglary", label: t("Burglary"), icon: "home" },
+    { id: "assault", label: t("Assault"), icon: "body" },
+    { id: "robbery", label: t("Robbery"), icon: "alert-circle" },
+    { id: "vandalism", label: t("Vandalism"), icon: "hammer" },
+    { id: "suspicious_activity", label: t("Suspicious Activity"), icon: "eye" },
+    { id: "other_crime", label: t("Other Crime"), icon: "ellipsis-horizontal" },
   ];
 
   const otherCategories = [
-    { id: "funeral", label: "Funeral", icon: "flower" },
-    { id: "wedding", label: "Wedding", icon: "heart" },
-    { id: "community_event", label: "Community Event", icon: "people" },
-    { id: "lost_found", label: "Lost & Found", icon: "search" },
-    { id: "noise_complaint", label: "Noise Complaint", icon: "volume-high" },
-    { id: "other_event", label: "Other", icon: "ellipsis-horizontal" },
+    { id: "funeral", label: t("Funeral"), icon: "flower" },
+    { id: "wedding", label: t("Wedding"), icon: "heart" },
+    { id: "community_event", label: t("Community Event"), icon: "people" },
+    { id: "lost_found", label: t("Lost & Found"), icon: "search" },
+    { id: "noise_complaint", label: t("Noise Complaint"), icon: "volume-high" },
+    { id: "other_event", label: t("Other"), icon: "ellipsis-horizontal" },
   ];
 
-  const getCrimeCategoryLabel = (value) => crimeCategories.find((category) => category.id === value)?.label || "Other Crime";
+  const getCrimeCategoryLabel = (value) => crimeCategories.find((category) => category.id === value)?.label || t("Other Crime");
   const getReportCrimeCategory = (report) => report?.crimeCategory || report?.location?.crimeCategory || "other_crime";
-  const getOtherCategoryLabel = (value) => otherCategories.find((category) => category.id === value)?.label || "Other";
+  const getOtherCategoryLabel = (value) => otherCategories.find((category) => category.id === value)?.label || t("Other");
   const getReportOtherCategory = (report) => report?.otherCategory || report?.location?.otherCategory || "other_event";
 
   return (
     <SafeAreaView edges={["left", "right", "bottom"]} style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
-        <ScreenHeader title="Report Incident" subtitle="Help keep your community safe" icon="megaphone" />
+        <ScreenHeader title={t("Report Incident")} subtitle={t("Help keep your community safe")} icon="megaphone" />
         <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
           <View style={{ backgroundColor: colors.accentSoft, borderRadius: 18, padding: 16, marginBottom: 22, borderWidth: 1, borderColor: colors.accentLight, flexDirection: "row", alignItems: "center" }}>
             <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: colors.accent, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
               <Ionicons name="megaphone-outline" size={23} color={colors.textInverse} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontWeight: "800", color: colors.text, marginBottom: 3 }}>See something? Report it.</Text>
-              <Text style={{ fontSize: 12, lineHeight: 18, color: colors.textLight }}>Your report helps community leaders respond to incidents in your area.</Text>
+              <Text style={{ fontSize: 15, fontWeight: "800", color: colors.text, marginBottom: 3 }}>{t("See something? Report it.")}</Text>
+              <Text style={{ fontSize: 12, lineHeight: 18, color: colors.textLight }}>{t("Your report helps community leaders respond to incidents in your area.")}</Text>
             </View>
           </View>
 
           <View style={{ marginBottom: 12 }}>
-            <Text style={{ fontSize: 18, fontWeight: "800", color: colors.text }}>What would you like to report?</Text>
-            <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 4 }}>Select the category that best describes the incident.</Text>
+            <Text style={{ fontSize: 18, fontWeight: "800", color: colors.text }}>{t("What would you like to report?")}</Text>
+            <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 4 }}>{t("Select the category that best describes the incident.")}</Text>
           </View>
 
           <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 24 }}>
@@ -311,8 +313,8 @@ export default function IncidentReportScreen() {
 
           {reportType === "crime" && (
             <View style={{ marginBottom: 24 }}>
-              <Text style={{ fontSize: 16, fontWeight: "800", color: colors.text, marginBottom: 4 }}>Crime type</Text>
-              <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 12 }}>What kind of crime did you observe?</Text>
+              <Text style={{ fontSize: 16, fontWeight: "800", color: colors.text, marginBottom: 4 }}>{t("Crime type")}</Text>
+              <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 12 }}>{t("What kind of crime did you observe?")}</Text>
               <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" }}>
                 {crimeCategories.map((category) => {
                   const isSelected = crimeCategory === category.id;
@@ -344,8 +346,8 @@ export default function IncidentReportScreen() {
 
           {reportType === "other" && (
             <View style={{ marginBottom: 24 }}>
-              <Text style={{ fontSize: 16, fontWeight: "800", color: colors.text, marginBottom: 4 }}>Other type</Text>
-              <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 12 }}>Select the type of community matter.</Text>
+              <Text style={{ fontSize: 16, fontWeight: "800", color: colors.text, marginBottom: 4 }}>{t("Other type")}</Text>
+              <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 12 }}>{t("Select the type of community matter.")}</Text>
               <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" }}>
                 {otherCategories.map((category) => {
                   const isSelected = otherCategory === category.id;
@@ -376,36 +378,36 @@ export default function IncidentReportScreen() {
           )}
 
           <View style={{ marginBottom: 24 }}>
-            <Text style={{ fontSize: 16, fontWeight: "800", color: colors.text, marginBottom: 4 }}>Tell us what happened</Text>
-            <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 12 }}>Provide as much useful information as possible.</Text>
+            <Text style={{ fontSize: 16, fontWeight: "800", color: colors.text, marginBottom: 4 }}>{t("Tell us what happened")}</Text>
+            <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 12 }}>{t("Provide as much useful information as possible.")}</Text>
             <View style={{ backgroundColor: colors.inputBackground, borderRadius: 16, borderWidth: 1, borderColor: colors.inputBorder, padding: 14 }}>
-              <TextInput style={{ minHeight: 130, textAlignVertical: "top", color: colors.text, fontSize: 14, lineHeight: 21 }} placeholder="Describe what happened or what you observed..." placeholderTextColor={colors.inputPlaceholder} selectionColor={colors.accent} multiline value={description} onChangeText={setDescription} maxLength={1000} />
+              <TextInput style={{ minHeight: 130, textAlignVertical: "top", color: colors.text, fontSize: 14, lineHeight: 21 }} placeholder={t("Describe what happened or what you observed...")} placeholderTextColor={colors.inputPlaceholder} selectionColor={colors.accent} multiline value={description} onChangeText={setDescription} maxLength={1000} />
               <Text style={{ textAlign: "right", fontSize: 10, color: colors.textLight, marginTop: 5 }}>{description.length}/1000</Text>
             </View>
           </View>
 
           <View style={{ marginBottom: 24 }}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-              <Text style={{ fontSize: 16, fontWeight: "800", color: colors.text }}>Evidence photos</Text>
+              <Text style={{ fontSize: 16, fontWeight: "800", color: colors.text }}>{t("Evidence photos")}</Text>
               <View style={{ backgroundColor: colors.background, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20 }}>
-                <Text style={{ fontSize: 10, fontWeight: "700", color: colors.textLight }}>OPTIONAL</Text>
+                <Text style={{ fontSize: 10, fontWeight: "700", color: colors.textLight }}>{t("OPTIONAL")}</Text>
               </View>
             </View>
-            <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 12 }}>Add photos that may help with the report.</Text>
+            <Text style={{ fontSize: 12, color: colors.textLight, marginBottom: 12 }}>{t("Add photos that may help with the report.")}</Text>
             <View style={{ flexDirection: "row", gap: 10 }}>
               <TouchableOpacity onPress={takePhoto} style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 15, borderWidth: 1, borderColor: colors.border, padding: 15, alignItems: "center" }}>
                 <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.accentSoft, alignItems: "center", justifyContent: "center", marginBottom: 7 }}>
                   <Ionicons name="camera-outline" size={23} color={colors.accent} />
                 </View>
-                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.text }}>Take Photo</Text>
-                <Text style={{ fontSize: 10, color: colors.textLight, marginTop: 2 }}>Use camera</Text>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.text }}>{t("Take Photo")}</Text>
+                <Text style={{ fontSize: 10, color: colors.textLight, marginTop: 2 }}>{t("Use camera")}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={pickImage} style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 15, borderWidth: 1, borderColor: colors.border, padding: 15, alignItems: "center" }}>
                 <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.accentSoft, alignItems: "center", justifyContent: "center", marginBottom: 7 }}>
                   <Ionicons name="images-outline" size={23} color={colors.accent} />
                 </View>
-                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.text }}>Gallery</Text>
-                <Text style={{ fontSize: 10, color: colors.textLight, marginTop: 2 }}>Choose photo</Text>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.text }}>{t("Gallery")}</Text>
+                <Text style={{ fontSize: 10, color: colors.textLight, marginTop: 2 }}>{t("Choose photo")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -413,8 +415,8 @@ export default function IncidentReportScreen() {
           {images.length > 0 && (
             <View style={{ marginTop: -8, marginBottom: 24 }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.text }}>Selected photos</Text>
-                <Text style={{ fontSize: 11, color: colors.textLight }}>{images.length} photo{images.length !== 1 ? "s" : ""}</Text>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.text }}>{t("Selected photos")}</Text>
+                <Text style={{ fontSize: 11, color: colors.textLight }}>{t("{{count}} photo", { count: images.length })}</Text>
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {images.map((uri, index) => (
@@ -436,21 +438,21 @@ export default function IncidentReportScreen() {
               <Ionicons name="eye-off-outline" size={21} color={colors.accent} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: "800", color: colors.text }}>Report anonymously</Text>
-              <Text style={{ fontSize: 11, lineHeight: 17, color: colors.textLight, marginTop: 2, paddingRight: 8 }}>Your identity will be hidden from the community.</Text>
+              <Text style={{ fontSize: 14, fontWeight: "800", color: colors.text }}>{t("Report anonymously")}</Text>
+              <Text style={{ fontSize: 11, lineHeight: 17, color: colors.textLight, marginTop: 2, paddingRight: 8 }}>{t("Your identity will be hidden from the community.")}</Text>
             </View>
             <Switch value={anonymous} onValueChange={setAnonymous} trackColor={{ false: colors.border, true: colors.accent }} thumbColor={colors.textInverse} />
           </View>
 
           <View style={{ marginBottom: 24 }}>
             <View style={{ marginBottom: 10 }}>
-              <Text style={{ fontSize: 17, fontWeight: "800", color: colors.text }}>Report location</Text>
-              <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 3 }}>Where did the incident happen?</Text>
+              <Text style={{ fontSize: 17, fontWeight: "800", color: colors.text }}>{t("Report location")}</Text>
+              <Text style={{ fontSize: 12, color: colors.textLight, marginTop: 3 }}>{t("Where did the incident happen?")}</Text>
             </View>
             {loadingPinpoints ? (
               <View style={{ backgroundColor: colors.surface, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center" }}>
                 <ActivityIndicator size="small" color={colors.accent} />
-                <Text style={{ fontSize: 12, color: colors.textLight, marginLeft: 10 }}>Loading your saved addresses...</Text>
+                <Text style={{ fontSize: 12, color: colors.textLight, marginLeft: 10 }}>{t("Loading your saved addresses...")}</Text>
               </View>
             ) : savedPinpoints.length === 0 ? (
               <View style={{ backgroundColor: colors.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.errorLight }}>
@@ -458,16 +460,16 @@ export default function IncidentReportScreen() {
                   <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: colors.errorLight, alignItems: "center", justifyContent: "center", marginRight: 10 }}>
                     <Ionicons name="location-outline" size={21} color={colors.error} />
                   </View>
-                  <Text style={{ flex: 1, fontSize: 14, fontWeight: "800", color: colors.error }}>No PinPoint address</Text>
+                  <Text style={{ flex: 1, fontSize: 14, fontWeight: "800", color: colors.error }}>{t("No PinPoint address")}</Text>
                 </View>
-                <Text style={{ fontSize: 12, color: colors.textLight, lineHeight: 19, marginBottom: 13 }}>Save an address in PinPoint first. This allows Community Protection Services to locate the incident accurately.</Text>
+                <Text style={{ fontSize: 12, color: colors.textLight, lineHeight: 19, marginBottom: 13 }}>{t("Save an address in PinPoint first. This allows Community Protection Services to locate the incident accurately.")}</Text>
                 <TouchableOpacity onPress={() => router.push("/(tabs)/pinpoint")} style={{ backgroundColor: colors.error, borderRadius: 11, paddingVertical: 12, alignItems: "center" }}>
-                  <Text style={{ color: colors.textInverse, fontSize: 12, fontWeight: "800" }}>Open PinPoint</Text>
+                  <Text style={{ color: colors.textInverse, fontSize: 12, fontWeight: "800" }}>{t("Open PinPoint")}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <>
-                <Text style={{ fontSize: 11, color: colors.textLight, marginBottom: 9 }}>Select a saved address</Text>
+                <Text style={{ fontSize: 11, color: colors.textLight, marginBottom: 9 }}>{t("Select a saved address")}</Text>
                 {savedPinpoints.map((pin) => {
                   const isSelected = selectedPinpoint?.id === pin.id;
                   return (
@@ -506,8 +508,8 @@ export default function IncidentReportScreen() {
                 <Ionicons name="document-text-outline" size={21} color={colors.accent} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 14, fontWeight: "800", color: colors.text }}>My Report History</Text>
-                <Text style={{ fontSize: 11, color: colors.textLight, marginTop: 3 }}>{userReports.length} report{userReports.length !== 1 ? "s" : ""} submitted</Text>
+                <Text style={{ fontSize: 14, fontWeight: "800", color: colors.text }}>{t("My Report History")}</Text>
+                <Text style={{ fontSize: 11, color: colors.textLight, marginTop: 3 }}>{t("{{count}} report submitted", { count: userReports.length })}</Text>
               </View>
               <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.background, alignItems: "center", justifyContent: "center" }}>
                 <Ionicons name={showReportHistory ? "chevron-up" : "chevron-down"} size={18} color={colors.textLight} />
@@ -519,12 +521,12 @@ export default function IncidentReportScreen() {
                 {loadingReports ? (
                   <View style={{ flexDirection: "row", alignItems: "center", paddingVertical: 10 }}>
                     <ActivityIndicator size="small" color={colors.accent} />
-                    <Text style={{ fontSize: 12, color: colors.textLight, marginLeft: 9 }}>Loading reports...</Text>
+                    <Text style={{ fontSize: 12, color: colors.textLight, marginLeft: 9 }}>{t("Loading reports...")}</Text>
                   </View>
                 ) : userReports.length === 0 ? (
                   <View style={{ alignItems: "center", paddingVertical: 18 }}>
                     <Ionicons name="documents-outline" size={34} color={colors.textLight} />
-                    <Text style={{ fontSize: 13, color: colors.textLight, marginTop: 8 }}>No reports submitted yet.</Text>
+                    <Text style={{ fontSize: 13, color: colors.textLight, marginTop: 8 }}>{t("No reports submitted yet.")}</Text>
                   </View>
                 ) : (
                   userReports.map((report) => {
@@ -537,7 +539,7 @@ export default function IncidentReportScreen() {
                             <View style={{ width: 31, height: 31, borderRadius: 10, backgroundColor: colors.accentSoft, alignItems: "center", justifyContent: "center", marginRight: 8 }}>
                               <Ionicons name={report.reportType === "crime" ? "shield-outline" : report.reportType === "hazard" ? "warning-outline" : "document-outline"} size={16} color={colors.accent} />
                             </View>
-                            <Text style={{ fontSize: 13, fontWeight: "800", color: colors.text }}>{report.reportType?.toUpperCase()}</Text>
+                            <Text style={{ fontSize: 13, fontWeight: "800", color: colors.text }}>{t(report.reportType?.toUpperCase() || "")}</Text>
                           </View>
                           <View style={{ backgroundColor: statusBackground, borderRadius: 20, paddingVertical: 5, paddingHorizontal: 9 }}>
                             <Text style={{ fontSize: 9, fontWeight: "800", color: statusColor }}>{getStatusLabel(report.status)}</Text>
@@ -560,11 +562,11 @@ export default function IncidentReportScreen() {
                             <Text style={{ flex: 1, fontSize: 10, color: colors.textLight, marginLeft: 5 }} numberOfLines={1}>{report.location.label}</Text>
                           </View>
                         )}
-                        {report.createdAt && <Text style={{ fontSize: 9, color: colors.textLight, marginTop: 2 }}>Submitted {new Date(report.createdAt).toLocaleString()}</Text>}
+                        {report.createdAt && <Text style={{ fontSize: 9, color: colors.textLight, marginTop: 2 }}>{t("Submitted")} {new Date(report.createdAt).toLocaleString()}</Text>}
                         {report.status !== "approved" && report.status !== "rejected" && (
                           <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
                             <Ionicons name="time-outline" size={13} color={colors.warning} />
-                            <Text style={{ fontSize: 10, color: colors.warning, marginLeft: 5, fontWeight: "600" }}>Waiting for community leader approval</Text>
+                            <Text style={{ fontSize: 10, color: colors.warning, marginLeft: 5, fontWeight: "600" }}>{t("Waiting for community leader approval")}</Text>
                           </View>
                         )}
                       </View>
@@ -591,19 +593,19 @@ export default function IncidentReportScreen() {
             {uploading ? (
               <>
                 <ActivityIndicator color={colors.textInverse} />
-                <Text style={{ color: colors.textInverse, fontWeight: "800", fontSize: 14, marginLeft: 9 }}>Submitting report...</Text>
+                <Text style={{ color: colors.textInverse, fontWeight: "800", fontSize: 14, marginLeft: 9 }}>{t("Submitting report...")}</Text>
               </>
             ) : (
               <>
                 <Ionicons name="send" size={19} color={colors.textInverse} />
-                <Text style={{ color: colors.textInverse, fontWeight: "800", fontSize: 15, marginLeft: 9 }}>Submit Report</Text>
+                <Text style={{ color: colors.textInverse, fontWeight: "800", fontSize: 15, marginLeft: 9 }}>{t("Submit Report")}</Text>
               </>
             )}
           </TouchableOpacity>
 
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 15, marginBottom: 20 }}>
             <Ionicons name="lock-closed-outline" size={13} color={colors.textLight} />
-            <Text style={{ fontSize: 10, color: colors.textLight, marginLeft: 5, textAlign: "center" }}>Your report will be reviewed by your community leader.</Text>
+            <Text style={{ fontSize: 10, color: colors.textLight, marginLeft: 5, textAlign: "center" }}>{t("Your report will be reviewed by your community leader.")}</Text>
           </View>
         </View>
       </ScrollView>

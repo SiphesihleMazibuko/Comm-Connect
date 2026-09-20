@@ -1,9 +1,11 @@
 import { Stack } from 'expo-router';
+import { LanguageProvider } from './context/LanguageContext';
 import { ThemeProvider } from './context/ThemeContext';
 
 export default function RootLayout() {
   return (
     <ThemeProvider>
+      <LanguageProvider>
       <Stack>
         <Stack.Screen
           name="(tabs)"
@@ -25,6 +27,7 @@ export default function RootLayout() {
           options={{ headerShown: false }}
         />
       </Stack>
+      </LanguageProvider>
     </ThemeProvider>
   );
 }

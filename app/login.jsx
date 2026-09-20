@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 
 import TouchableOpacity from '../components/FeedbackTouchableOpacity';
 import { getFriendlySupabaseError, getSupabaseClient, getUserProfile, withRequestTimeout } from '../config/supabase';
+import { useLanguage } from './context/LanguageContext';
 import { useTheme } from './context/ThemeContext';
 import { FALLBACK_COUNTRY_CODES, fetchCountryCodes, getDefaultCountryCode, searchCountryCodes } from '../Utils/countryCodes';
 import { clearOtpAttempts, formatLockoutTime, getOtpAttemptState, isInvalidOtpError, recordFailedOtpAttempt } from '../Utils/otpSecurity';
@@ -14,6 +15,7 @@ const OTP_LENGTH = 6;
 
 export default function LoginScreen() {
   const { colors, isDark } = useTheme();
+  const { t } = useLanguage();
   const insets = useSafeAreaInsets();
 
   const [countryCodes, setCountryCodes] = useState(FALLBACK_COUNTRY_CODES);
@@ -245,15 +247,15 @@ export default function LoginScreen() {
         paddingTop: 30, paddingBottom: 30,}}>
     <View style={{alignItems: 'center',marginBottom: 28,}}>
         <Text style={{fontSize: 30,fontWeight: '800',color: colors.text, textAlign: 'center',letterSpacing: -0.5,}}>
-          Welcome Back
+          {t('Welcome Back')}
         </Text>
 
         <Text style={{fontSize: 14,color: colors.textLight,marginTop: 7,textAlign: 'center',lineHeight: 20,}}>
-          {step === 'phone'? 'Log in to your Comm-Connect account': 'Enter the verification code sent to your phone'}
+          {step === 'phone'? t('Log in to your Comm-Connect account'): t('Enter the verification code sent to your phone')}
         </Text>
       </View>
 
-      {step === 'phone' ? (<><Text style={{fontSize: 14,fontWeight: '700', color: colors.text, marginBottom: 8,}}>Phone Number</Text>
+      {step === 'phone' ? (<><Text style={{fontSize: 14,fontWeight: '700', color: colors.text, marginBottom: 8,}}>{t('Phone Number')}</Text>
           <View style={{flexDirection: 'row', gap: 8,marginBottom: 8,}}>
 
             <TouchableOpacity onPress={toggleCountryPicker}
@@ -275,7 +277,7 @@ export default function LoginScreen() {
                 marginBottom: 12, overflow: 'hidden', maxHeight: 320,}}>
               <TextInput style={{backgroundColor: colors.surfaceRaised,borderRadius: 10,padding: 12,margin: 10,borderWidth: 1,borderColor: colors.border,color: colors.text,
                   minHeight: 46,}}
-                placeholder="Search country or code"
+                placeholder={t('Search country or code')}
                 onFocus={revealFocusedInput}
                 placeholderTextColor={colors.inputPlaceholder}
                 selectionColor={colors.accent}
@@ -286,7 +288,7 @@ export default function LoginScreen() {
               />
 
               {filteredCountryCodes.length === 0 ? (
-                <Text style={{color: colors.textLight, padding: 14, textAlign: 'center',}}>No countries found</Text>) : (
+                <Text style={{color: colors.textLight, padding: 14, textAlign: 'center',}}>{t('No countries found')}</Text>) : (
                 <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
                   {filteredCountryCodes.map((country) => {const selected = selectedCountry.code === country.code &&
                       selectedCountry.name === country.name;
@@ -309,7 +311,7 @@ export default function LoginScreen() {
             <Ionicons name="information-circle-outline"size={16}color={colors.textLight}/>
 
             <Text style={{fontSize: 12,color: colors.textLight,flex: 1,lineHeight: 18,}}>
-              Don&apos;t include the country code or leading zero.</Text>
+              {t("Don't include the country code or leading zero.")}</Text>
           </View>
           </>) : (
 
@@ -318,9 +320,9 @@ export default function LoginScreen() {
             <View style={{width: 58,height: 58,borderRadius: 29,backgroundColor: colors.primaryLight, alignItems: 'center',justifyContent: 'center',
                 marginBottom: 12,}}><Ionicons name="shield-checkmark" size={28}color={colors.accent}/></View>
 
-            <Text style={{ fontSize: 15, fontWeight: '700',color: colors.text,textAlign: 'center',}}>Enter verification code
+            <Text style={{ fontSize: 15, fontWeight: '700',color: colors.text,textAlign: 'center',}}>{t('Enter verification code')}
             </Text>{verificationId && (<Text style={{fontSize: 12,color: colors.textLight,textAlign: 'center',marginTop: 6,}}>
-                Code sent to {verificationId}</Text>)}
+                {t('Code sent to')} {verificationId}</Text>)}
           </View>
 
           <View style={{flexDirection: 'row',justifyContent: 'center',gap: 8,marginBottom: 18,}}>{otp.map((digit, index) => (
@@ -344,16 +346,16 @@ export default function LoginScreen() {
         {loading ? (
           <ActivityIndicator color="#FFFFFF" />) : (<View style={{flexDirection: 'row',alignItems: 'center',gap: 8,}}>
             <Ionicons name={step === 'phone'? 'send' : 'checkmark-circle'}size={19}color="#FFFFFF"/>
-            <Text style={{color: '#FFFFFF',fontSize: 16,fontWeight: '800',}}>{step === 'phone'? 'Send OTP'  : 'Verify & Login'}</Text>
+            <Text style={{color: '#FFFFFF',fontSize: 16,fontWeight: '800',}}>{step === 'phone'? t('Send OTP')  : t('Verify & Login')}</Text>
           </View>)}
       </TouchableOpacity>
 
 
       <View style={{flexDirection: 'row',justifyContent: 'center',alignItems: 'center',gap: 4,}}>
-        <Text style={{color: colors.textLight, fontSize: 14,}}> Don&apos;t have an account?</Text>
+        <Text style={{color: colors.textLight, fontSize: 14,}}> {t("Don't have an account?")}</Text>
 
         <TouchableOpacity onPress={() => router.push('/signup')} disabled={loading}>
-          <Text style={{fontWeight: '800',color: colors.accent, fontSize: 14,}}> Sign Up</Text>
+          <Text style={{fontWeight: '800',color: colors.accent, fontSize: 14,}}> {t('Sign Up')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -361,7 +363,7 @@ export default function LoginScreen() {
         <Ionicons name="lock-closed-outline" size={14} color={colors.textMuted}/>
 
         <Text style={{color: colors.textMuted,fontSize: 11,textAlign: 'center',}}> 
-          Your phone number is securely verified.</Text>
+          {t('Your phone number is securely verified.')}</Text>
       </View>
     </View>
       </ScrollView>
