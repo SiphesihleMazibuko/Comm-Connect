@@ -1,5 +1,6 @@
 import TouchableOpacity from '../../components/FeedbackTouchableOpacity';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -544,6 +545,26 @@ export default function CommunityFeedScreen() {
                 </GlossyCardSmall>
               </View>
             </View>
+          </View>
+
+          {/* HELP NEAR YOU */}
+          <View style={{ paddingHorizontal: 14, paddingTop: 8, paddingBottom: 8 }}>
+            <TouchableOpacity onPress={() => router.push('/helpnearyou')} activeOpacity={0.8}>
+              <GlossyCardSmall style={{ minHeight: 92, paddingHorizontal: 12, paddingVertical: 11 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: `${colors.accent}18`, justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+                    <Ionicons name="heart-outline" size={20} color={colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.text, fontSize: 14, fontWeight: '800' }}>Help Near You</Text>
+                    <Text style={{ color: colors.textLight, fontSize: 10, marginTop: 3, lineHeight: 14 }} numberOfLines={2}>
+                      Find support and services in your community
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.accent} />
+                </View>
+              </GlossyCardSmall>
+            </TouchableOpacity>
           </View>
 
           <ScrollView
