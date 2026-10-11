@@ -51,8 +51,8 @@ function GlassTabIcon({
   return (
     <View
       style={{
-        width: focused ? 55 : 34,
-        height: focused ? 55 : 40,
+        width: focused ? 70 : 34,
+        height: focused ? 65 : 40,
         borderRadius: 50,
 
         alignItems: 'center',
@@ -196,7 +196,7 @@ export default function TabLayout() {
   };
 
   const communityFeedIcon =
-    createTabIcon('newspaper');
+    createTabIcon('home');
 
   const responderHomeIcon =
     createTabIcon('radio');
