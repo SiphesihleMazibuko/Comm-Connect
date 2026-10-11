@@ -532,6 +532,13 @@ create policy "Approved admins can read user profiles"
 on public.users for select to authenticated
 using ((select public.is_approved_admin()));
 
+grant select on public.audit_logs to authenticated;
+
+drop policy if exists "Approved admins can read audit logs" on public.audit_logs;
+create policy "Approved admins can read audit logs"
+on public.audit_logs for select to authenticated
+using ((select public.is_approved_admin()));
+
 drop view if exists public.masked_user_directory;
 create view public.masked_user_directory with (security_barrier = true) as
 select

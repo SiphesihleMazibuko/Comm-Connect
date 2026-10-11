@@ -184,6 +184,10 @@ export default function LoginScreen() {
         router.replace('/(tabs)/emergencyResponderDashboard');
         return;
       }
+      if (userData.role === 'admin' || userData.role === 'super_admin') {
+        router.replace('/(tabs)/adminDashboard');
+        return;
+      }
       Alert.alert('Invalid User Role', 'Your account does not have a valid role assigned. Please contact your community administrator.');
     } catch (error) {
       console.error('OTP verification error:', error);

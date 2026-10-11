@@ -12,10 +12,11 @@ export default function ScreenHeader({
   subtitle,
   meta,
   icon,
+  leftIcon,
+  onLeftPress,
 }) {
   const { colors, isDark } = useTheme();
 
-  // Text colours for the two header images
   const headerTextColor = isDark
     ? colors.textInverse
     : colors.text;
@@ -25,33 +26,45 @@ export default function ScreenHeader({
     : colors.textLight;
 
   return (
-    
-<ImageBackground
-  source={
-    isDark
-      ? require("../assets/header-dark.png")
-      : require("../assets/header-light.png")
-  }
-  resizeMode="cover"
-  imageStyle={{
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    opacity: 1,
-  }}
-  style={{
-    padding: 28,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    overflow: "hidden",
+    <ImageBackground
+      source={
+        isDark
+          ? require("../assets/header-dark.png")
+          : require("../assets/header-light.png")
+      }
+      resizeMode="cover"
+      imageStyle={{
+        borderBottomLeftRadius: 32,
+        borderBottomRightRadius: 32,
+        opacity: 1,
+      }}
+      style={{
+        padding: 28,
+        borderBottomLeftRadius: 32,
+        borderBottomRightRadius: 32,
+        overflow: "hidden",
+        backgroundColor: isDark
+          ? "#071A12"
+          : "#00C853",
+      }}
+    >
+      {/* BACK BUTTON */}
+      {leftIcon && (
+        <View
+          style={{
+            marginBottom: 14,
+          }}
+        >
+          <Ionicons
+            name={leftIcon}
+            size={28}
+            color={headerTextColor}
+            onPress={onLeftPress}
+          />
+        </View>
+      )}
 
-    // Solid background behind the image
-    backgroundColor: isDark
-      ? "#071A12"
-      : "#00C853",
-  }}
->
       {/* HEADER CONTENT */}
-
       <View
         style={{
           flexDirection: "row",
@@ -59,18 +72,14 @@ export default function ScreenHeader({
           alignItems: "center",
         }}
       >
-
         {/* TEXT */}
-
         <View
           style={{
             flex: 1,
             paddingRight: 16,
           }}
         >
-
           {/* TITLE */}
-
           <Text
             style={{
               fontSize: 28,
@@ -81,9 +90,7 @@ export default function ScreenHeader({
             {title}
           </Text>
 
-
           {/* SUBTITLE */}
-
           {subtitle && (
             <Text
               style={{
@@ -97,9 +104,7 @@ export default function ScreenHeader({
             </Text>
           )}
 
-
           {/* META */}
-
           {meta && (
             <Text
               style={{
@@ -112,39 +117,30 @@ export default function ScreenHeader({
               {meta}
             </Text>
           )}
-
         </View>
 
-
         {/* ICON */}
-
         {icon && (
           <View
             style={{
               width: 60,
               height: 60,
               borderRadius: 30,
-
               backgroundColor: isDark
                 ? "rgba(255,255,255,0.20)"
                 : "rgba(0,0,0,0.08)",
-
               justifyContent: "center",
               alignItems: "center",
             }}
           >
-
             <Ionicons
               name={icon}
               size={32}
               color={headerTextColor}
             />
-
           </View>
         )}
-
       </View>
-
     </ImageBackground>
   );
 }
