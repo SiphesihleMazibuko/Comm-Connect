@@ -494,7 +494,7 @@ export default function SettingsScreen() {
           <TouchableOpacity
             onPress={handleLogout}
             disabled={loggingOut}
-            style={{ backgroundColor: colors.error, borderRadius: 14, paddingVertical: 15, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 9, marginBottom: 10, opacity: loggingOut ? 0.7 : 1 }}
+            style={{ backgroundColor: colors.error, borderRadius: 14, paddingVertical: 15, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 9, marginBottom: 50, opacity: loggingOut ? 0.7 : 1 }}
           >
             {loggingOut ? (
               <ActivityIndicator color="#FFFFFF" />
