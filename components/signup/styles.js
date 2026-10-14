@@ -3,7 +3,7 @@ import colors from '../../Utils/colors';
 export const labelStyle = {
   fontSize: 14,
   fontWeight: '500',
-  color: colors.text,
+  color: colors.background,
   marginBottom: 8,
 };
 

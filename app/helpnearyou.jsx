@@ -185,7 +185,7 @@ export default function HelpNearYou() {
                   }}>
                     <Ionicons
                       name={
-                        service.category === 'Mental Health'
+                        service.category === 'MentalHealth'
                           ? 'heart-outline'
                           : service.category === 'Healthcare'
                           ? 'medkit-outline'

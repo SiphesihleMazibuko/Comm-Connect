@@ -51,8 +51,8 @@ function GlassTabIcon({
   return (
     <View
       style={{
-        width: focused ? 55 : 34,
-        height: focused ? 55 : 40,
+        width: focused ? 70 : 34,
+        height: focused ? 65 : 40,
         borderRadius: 50,
 
         alignItems: 'center',
@@ -176,6 +176,8 @@ export default function TabLayout() {
     role === 'community_protection_service' ||
     role === 'emergency_responder';
 
+  const isAdmin = role === 'admin' || role === 'super_admin';
+
   // ============================================================
   // TAB ICONS
   // ============================================================
@@ -194,10 +196,13 @@ export default function TabLayout() {
   };
 
   const communityFeedIcon =
-    createTabIcon('newspaper');
+    createTabIcon('home');
 
   const responderHomeIcon =
     createTabIcon('radio');
+
+  const adminIcon =
+    createTabIcon('grid');
 
   const emergencyIcon =
     createTabIcon('alert-circle');
@@ -358,6 +363,25 @@ export default function TabLayout() {
 
           tabBarIcon:
             responderHomeIcon,
+        }}
+      />
+
+      {/* ========================================================
+          ADMIN DASHBOARD
+      ======================================================== */}
+
+      <Tabs.Screen
+        name="adminDashboard"
+        options={{
+          title: t('Admin'),
+
+          href:
+            isAdmin
+              ? undefined
+              : null,
+
+          tabBarIcon:
+            adminIcon,
         }}
       />
 
