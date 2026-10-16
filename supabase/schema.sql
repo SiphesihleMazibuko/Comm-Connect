@@ -34,6 +34,63 @@ alter table public.users add column if not exists suburb_id uuid;
 alter table public.users add column if not exists zone_id uuid;
 alter table public.users add column if not exists ward_id uuid;
 
+-- Store ID numbers as keyed HMACs in a non-exposed schema. The trigger keeps
+-- the legacy input column empty so existing profile inserts remain compatible.
+create extension if not exists pgcrypto with schema extensions;
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
+
+create table if not exists private.id_number_hmac_key (
+  singleton boolean primary key default true check (singleton),
+  secret bytea not null
+);
+insert into private.id_number_hmac_key (singleton, secret)
+values (true, extensions.gen_random_bytes(32))
+on conflict (singleton) do nothing;
+
+create table if not exists private.user_identity_hashes (
+  user_id uuid primary key references public.users(id) on delete cascade,
+  id_number_hmac text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+revoke all on private.id_number_hmac_key from public, anon, authenticated;
+revoke all on private.user_identity_hashes from public, anon, authenticated;
+
+create or replace function public.protect_user_id_number()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, extensions
+as $$
+declare
+  normalized_id text;
+  hmac_key bytea;
+begin
+  normalized_id := nullif(regexp_replace(coalesce(new."idNumber", ''), '[[:space:]]', '', 'g'), '');
+  if normalized_id is not null then
+    select secret into strict hmac_key
+    from private.id_number_hmac_key where singleton = true;
+    insert into private.user_identity_hashes (user_id, id_number_hmac, updated_at)
+    values (
+      new.id,
+      encode(extensions.hmac(convert_to(normalized_id, 'UTF8'), hmac_key, 'sha256'), 'hex'),
+      now()
+    )
+    on conflict (user_id) do update
+      set id_number_hmac = excluded.id_number_hmac,
+          updated_at = excluded.updated_at;
+  end if;
+  new."idNumber" := null;
+  return new;
+end;
+$$;
+revoke all on function public.protect_user_id_number() from public, anon, authenticated;
+drop trigger if exists protect_user_id_number on public.users;
+create trigger protect_user_id_number
+before insert or update of "idNumber" on public.users
+for each row execute function public.protect_user_id_number();
+
 alter table public.users enable row level security;
 
 drop policy if exists "Users can read their own profile" on public.users;
@@ -405,7 +462,9 @@ begin
     else
       new."approvalStatus" := 'approved';
     end if;
-  elsif auth.role() = 'authenticated' and (
+  elsif auth.role() = 'authenticated'
+    and current_setting('app.signup_profile_completion_user', true) is distinct from auth.uid()::text
+    and (
     new.role is distinct from old.role
     or new."requestedRole" is distinct from old."requestedRole"
     or new."approvalStatus" is distinct from old."approvalStatus"
@@ -420,6 +479,76 @@ drop trigger if exists protect_user_privileges_trigger on public.users;
 create trigger protect_user_privileges_trigger
 before insert or update on public.users
 for each row execute function public.protect_user_privileges();
+
+-- Signup RPC verifies the session, sources phone from auth.users, and stores
+-- only a keyed ID digest in the private schema.
+create or replace function public.complete_my_signup_profile(p_profile jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, auth, extensions
+as $$
+declare
+  caller_id uuid := auth.uid();
+  requested_role text := coalesce(p_profile->>'requestedRole', 'resident');
+  normalized_id text := regexp_replace(coalesce(p_profile->>'idNumber', ''), '[[:space:]]', '', 'g');
+  verified_phone text;
+  hmac_key bytea;
+  candidate_hmac text;
+  existing_hmac text;
+begin
+  if caller_id is null then raise exception 'Authentication is required to complete signup' using errcode = '42501'; end if;
+  if requested_role not in ('resident', 'community_leader', 'community_protection_service') then raise exception 'Invalid signup role' using errcode = '22023'; end if;
+  if nullif(trim(coalesce(p_profile->>'firstName', '')), '') is null
+    or nullif(trim(coalesce(p_profile->>'lastName', '')), '') is null
+    or nullif(trim(coalesce(p_profile->>'email', '')), '') is null then
+    raise exception 'First name, last name, and email are required' using errcode = '22023';
+  end if;
+  if normalized_id !~ '^[0-9]{13}$' then raise exception 'A valid 13-digit ID number is required' using errcode = '22023'; end if;
+
+  select phone into verified_phone from auth.users where id = caller_id;
+  if nullif(verified_phone, '') is null then raise exception 'A verified phone number is required to complete signup' using errcode = '22023'; end if;
+  select secret into strict hmac_key from private.id_number_hmac_key where singleton = true;
+  candidate_hmac := encode(extensions.hmac(convert_to(normalized_id, 'UTF8'), hmac_key, 'sha256'), 'hex');
+  select id_number_hmac into existing_hmac from private.user_identity_hashes where user_id = caller_id;
+  if existing_hmac is not null and existing_hmac <> candidate_hmac then raise exception 'An ID number is already protected for this account' using errcode = '23505'; end if;
+  perform set_config('app.signup_profile_completion_user', caller_id::text, true);
+  insert into public.users (
+    id, "firstName", "lastName", email, "phoneNumber", "idNumber", location,
+    role, "requestedRole", "approvalStatus"
+  ) values (
+    caller_id, trim(p_profile->>'firstName'), trim(p_profile->>'lastName'),
+    lower(trim(p_profile->>'email')), verified_phone, null,
+    nullif(trim(coalesce(p_profile->>'location', '')), ''), 'resident',
+    case when requested_role = 'resident' then null else requested_role end,
+    case when requested_role = 'resident' then 'approved' else 'pending' end
+  ) on conflict (id) do nothing;
+
+  update public.users set
+    "firstName" = trim(p_profile->>'firstName'), "lastName" = trim(p_profile->>'lastName'), email = lower(trim(p_profile->>'email')),
+    "phoneNumber" = verified_phone, "idNumber" = null, location = nullif(trim(coalesce(p_profile->>'location', '')), ''),
+    role = 'resident', "requestedRole" = case when requested_role = 'resident' then null else requested_role end,
+    "approvalStatus" = case when requested_role = 'resident' then 'approved' else 'pending' end,
+    "organizationName" = nullif(trim(coalesce(p_profile->>'organizationName', '')), ''),
+    "responderType" = case when requested_role = 'community_protection_service' then 'community_protection_service' else null end,
+    "serviceType" = case when requested_role = 'community_protection_service' then 'community_protection_service' else null end,
+    "wardName" = case when requested_role = 'community_protection_service' then nullif(trim(coalesce(p_profile->>'wardName', '')), '') else null end,
+    province_id = nullif(p_profile->>'province_id', '')::uuid, city_id = nullif(p_profile->>'city_id', '')::uuid,
+    suburb_id = nullif(p_profile->>'suburb_id', '')::uuid, zone_id = nullif(p_profile->>'zone_id', '')::uuid,
+    ward_id = nullif(p_profile->>'ward_id', '')::uuid,
+    permissions = jsonb_build_object('locationEnabled', false, 'notificationsEnabled', false,
+      'manualWardNumber', nullif(p_profile->'permissions'->>'manualWardNumber', ''),
+      'pinpointAddress', p_profile->'permissions'->'pinpointAddress', 'canReportIncident', true,
+      'canRequestEmergency', true, 'canReviewReports', false, 'canRespondToEmergency', false,
+      'canClockInForDuty', false, 'canSendCommunityAlerts', false)
+  where id = caller_id;
+  if not found then raise exception 'Signup profile was not created for this account'; end if;
+  insert into private.user_identity_hashes (user_id, id_number_hmac)
+  values (caller_id, candidate_hmac) on conflict (user_id) do nothing;
+end;
+$$;
+revoke all on function public.complete_my_signup_profile(jsonb) from public, anon;
+grant execute on function public.complete_my_signup_profile(jsonb) to authenticated;
 
 -- Reports can be updated by their submitter or an approved community leader.
 drop policy if exists "Authenticated users can update reports" on public.reports;

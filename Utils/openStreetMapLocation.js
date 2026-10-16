@@ -59,6 +59,21 @@ export const reverseGeocodeWithOpenStreetMap = async (latitude, longitude) => {
   };
 };
 
+export const searchOpenStreetMapAddress = async (query) => {
+  const trimmedQuery = String(query || '').trim();
+  if (!trimmedQuery) throw new Error('Enter an address to search.');
+  const params = new URLSearchParams({ format: 'jsonv2', q: trimmedQuery, limit: '1', addressdetails: '1' });
+  if (NOMINATIM_EMAIL) params.append('email', NOMINATIM_EMAIL);
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+    headers: { Accept: 'application/json', 'User-Agent': 'Pinpoint/1.0 contact:pinpoint-app', Referer: 'pinpoint://walkwithme' },
+  });
+  if (!response.ok) throw new Error('Address search is unavailable. Enter coordinates manually.');
+  const results = await response.json();
+  const result = results?.[0];
+  if (!result || !Number.isFinite(Number(result.lat)) || !Number.isFinite(Number(result.lon))) throw new Error('No coordinates found. Try a more specific address or enter coordinates manually.');
+  return { label: result.display_name || trimmedQuery, latitude: String(result.lat), longitude: String(result.lon) };
+};
+
 export const buildOpenStreetMapAddressLabel = (locationDetails, fallback) => {
   const address = locationDetails?.rawAddress || {};
 

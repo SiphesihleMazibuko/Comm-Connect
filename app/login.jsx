@@ -101,7 +101,10 @@ export default function LoginScreen() {
         return;
       }
       const client = getSupabaseClient();
-      const { error } = await withRequestTimeout(client.auth.signInWithOtp({ phone: e164 }));
+      const { error } = await withRequestTimeout(
+        client.auth.signInWithOtp({ phone: e164 }),
+        45000,
+      );
       if (error) throw error;
       setVerificationId(e164);
       setStep('otp');

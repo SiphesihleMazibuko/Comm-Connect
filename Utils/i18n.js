@@ -1,5 +1,6 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
+import helpNearYouTranslations from './helpNearYouTranslations';
 
 export const DEFAULT_LANGUAGE = 'en';
 
@@ -1466,7 +1467,7 @@ resources.ss = {
 
 resources.ve = {
   translation: {
-    ...resources.st.translation,
+    ...resources.en.translation,
     English: 'Luisimane',
     Language: 'Luambo',
     Settings: 'Nzudzanyo',
@@ -1508,7 +1509,7 @@ resources.ve = {
 
 resources.ts = {
   translation: {
-    ...resources.st.translation,
+    ...resources.en.translation,
     English: 'Xinghezi',
     Language: 'Ririmi',
     Settings: 'Swiyimiso',
@@ -1547,6 +1548,32 @@ resources.ts = {
     'Your preference is saved to your profile.': 'Leswi u swi hlawuleke swi hlayisiwile eka phurofayili ya wena.',
   },
 };
+
+const cpsWardRosterTranslations = {
+  en: { 'CPF Members in Your Ward': 'CPF Members in Your Ward', '{{count}} CPF members': '{{count}} CPF members', 'No CPF members found for this ward': 'No CPF members found for this ward', 'Not currently on duty': 'Not currently on duty', 'OFF DUTY': 'OFF DUTY' },
+  zu: { 'CPF Members in Your Ward': 'Amalungu e-CPF ewodini lakho', '{{count}} CPF members': 'Amalungu e-CPF: {{count}}', 'No CPF members found for this ward': 'Awekho amalungu e-CPF atholakele kule wodi', 'Not currently on duty': 'Akekho emsebenzini njengamanje', 'OFF DUTY': 'AKASEBENZI' },
+  st: { 'CPF Members in Your Ward': 'Ditho tsa CPF woteng ya heno', '{{count}} CPF members': 'Ditho tsa CPF: {{count}}', 'No CPF members found for this ward': 'Ha ho ditho tsa CPF tse fumanweng woteng ena', 'Not currently on duty': 'Ha a mosebetsing hajwale', 'OFF DUTY': 'HA A MOSEBETSING' },
+  af: { 'CPF Members in Your Ward': 'CPF-lede in jou wyk', '{{count}} CPF members': '{{count}} CPF-lede', 'No CPF members found for this ward': 'Geen CPF-lede vir hierdie wyk gevind nie', 'Not currently on duty': 'Nie tans aan diens nie', 'OFF DUTY': 'NIE AAN DIENS NIE' },
+  nso: { 'CPF Members in Your Ward': 'Maloko a CPF woteng ya gago', '{{count}} CPF members': 'Maloko a CPF: {{count}}', 'No CPF members found for this ward': 'Ga go maloko a CPF ao a hweditšwego woteng ye', 'Not currently on duty': 'Ga a šome mo nakong ye', 'OFF DUTY': 'GA A ŠOME' },
+  xh: { 'CPF Members in Your Ward': 'Amalungu e-CPF kwiwadi yakho', '{{count}} CPF members': 'Amalungu e-CPF: {{count}}', 'No CPF members found for this ward': 'Akafumanekanga amalungu e-CPF kule wadi', 'Not currently on duty': 'Akakho emsebenzini ngoku', 'OFF DUTY': 'AKAKHO EMSEBENZINI' },
+  tn: { 'CPF Members in Your Ward': 'Maloko a CPF mo wateng ya gago', '{{count}} CPF members': 'Maloko a CPF: {{count}}', 'No CPF members found for this ward': 'Ga go a bonwa maloko a CPF mo wateng eno', 'Not currently on duty': 'Ga a mo tirong jaanong', 'OFF DUTY': 'GA A MO TIRONG' },
+  ss: { 'CPF Members in Your Ward': 'Emalunga e-CPF ewodini yakho', '{{count}} CPF members': 'Emalunga e-CPF: {{count}}', 'No CPF members found for this ward': 'Akutfolakali emalunga e-CPF kule wadi', 'Not currently on duty': 'Akekho emsebentini nyalo', 'OFF DUTY': 'AKASEBENTI' },
+  ve: { 'CPF Members in Your Ward': 'Mirado ya CPF kha wadi yanu', '{{count}} CPF members': 'Mirado ya CPF: {{count}}', 'No CPF members found for this ward': 'A hu wanali mirado ya CPF kha wadi iyi', 'Not currently on duty': 'A si mushumoni zwino', 'OFF DUTY': 'A SI MUSHUMONI' },
+  ts: { 'CPF Members in Your Ward': 'Swirho swa CPF ewadini ya wena', '{{count}} CPF members': 'Swirho swa CPF: {{count}}', 'No CPF members found for this ward': 'A ku kumekanga swirho swa CPF ewadini leyi', 'Not currently on duty': 'A nga le ntirhweni sweswi', 'OFF DUTY': 'A NGA LE NTIRHWENI' },
+};
+
+for (const [language, translation] of Object.entries(cpsWardRosterTranslations)) {
+  resources[language].translation = { ...resources[language].translation, ...translation };
+}
+
+for (const language of SUPPORTED_LANGUAGES) {
+  const languageResources = resources[language.code] || { translation: {} };
+  languageResources.translation = {
+    ...languageResources.translation,
+    ...helpNearYouTranslations[language.code],
+  };
+  resources[language.code] = languageResources;
+}
 
 if (!i18n.isInitialized) {
   i18n

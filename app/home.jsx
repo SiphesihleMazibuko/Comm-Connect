@@ -278,6 +278,22 @@ export default function Home() {
           </TouchableOpacity>
         </View>
 
+        {/* WALK WITH ME */}
+        {profile?.role === 'resident' && <View style={{ paddingHorizontal: 16, marginTop: 18 }}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/walkwithme')} activeOpacity={0.8}>
+            <View style={{ backgroundColor: colors.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: colors.accentLight, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Ionicons name="walk" size={24} color={colors.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.text, fontWeight: '800', fontSize: 16 }}>WalkWithMe</Text>
+                <Text style={{ color: colors.textLight, fontSize: 12, marginTop: 3 }}>Request a trusted CPF member to accompany you safely.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.accent} />
+            </View>
+          </TouchableOpacity>
+        </View>}
+
         {/* COMMUNITY OVERVIEW */}
         <View style={{ paddingHorizontal: 16, marginTop: 28 }}>
           <Text style={{ fontSize: 19, fontWeight: '700', color: colors.text, marginBottom: 12 }}>

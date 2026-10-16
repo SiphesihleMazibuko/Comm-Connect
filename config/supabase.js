@@ -625,8 +625,14 @@ export const getFriendlySupabaseError = (error) => {
   if (message.includes("User not found")) {
     return "No account found with this phone number. Please sign up.";
   }
+  if (message.toLowerCase().includes("user is banned")) {
+    return "Supabase has blocked OTP verification for this account. Contact a Comm-Connect administrator to review the account access.";
+  }
   if (message.includes("Network request failed")) {
     return "Network error. Please check your internet connection.";
+  }
+  if (message === "REQUEST_TIMEOUT") {
+    return "The request is taking longer than expected. Check your connection and try again. If an OTP arrived, use it before requesting another code.";
   }
   if (message.includes("OTP expired")) {
     return "The verification code has expired. Please request a new one.";

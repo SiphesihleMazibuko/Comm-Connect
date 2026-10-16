@@ -552,7 +552,7 @@ export default function PinPointScreen() {
         contentContainerStyle={{ paddingBottom: 24 }}
         showsVerticalScrollIndicator={false}
       >
-        <ScreenHeader title={t('PinPoint Address')} subtitle={t('Generate your unique digital address')} icon="location" />
+        <ScreenHeader title={t('Digital Address')} subtitle={t('Generate your unique digital address')} icon="location" />
 
         <View style={{
           marginHorizontal: 16,

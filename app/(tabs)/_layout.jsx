@@ -334,7 +334,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="communityfeed"
         options={{
-          title: t('Home'),
+          title: t('Community'),
 
           href:
             isResident ||
@@ -402,6 +402,15 @@ export default function TabLayout() {
             emergencyIcon,
         }}
       />
+
+      <Tabs.Screen
+        name="walkwithme"
+        options={{ href: null }}
+      />
+
+      <Tabs.Screen name="communityupdates" options={{ href: null }} />
+      <Tabs.Screen name="civicservices" options={{ href: null }} />
+      <Tabs.Screen name="emergencysafety" options={{ href: null }} />
 
       {/* ========================================================
           ON DUTY

@@ -12,7 +12,6 @@ import {
   getFriendlySupabaseError,
   getSupabaseClient,
   insertRow,
-  upsertRow,
   withRequestTimeout,
 } from '../config/supabase';
 
@@ -405,7 +404,10 @@ export default function SignupScreen() {
       }
 
       const client = getSupabaseClient();
-      const { error } = await withRequestTimeout(client.auth.signInWithOtp({ phone: fullPhoneNumber }));
+      const { error } = await withRequestTimeout(
+        client.auth.signInWithOtp({ phone: fullPhoneNumber }),
+        45000,
+      );
 
       if (error) throw error;
 
@@ -503,41 +505,54 @@ export default function SignupScreen() {
         throw new Error('Could not create Supabase user.');
       }
 
-      await upsertRow('users', {
-        id: data.user.id,
-        firstName: validation.values.firstName,
-        lastName: validation.values.lastName,
-        location: location || pinpointLocation?.digitalAddress || null,
-        role: selectedRole,
-        organizationName: selectedRole === 'community_leader' ? validation.values.organizationName : null,
-        responderType: selectedRole === 'community_protection_service' ? 'community_protection_service' : null,
-        serviceType: selectedRole === 'community_protection_service' ? 'community_protection_service' : null,
-        wardName: selectedRole === 'community_protection_service' ? cpsWardName.trim() : null,
-        province_id: selectedProvince?.id || null,
-        city_id: selectedCity?.id || null,
-        suburb_id: selectedSuburb?.id || null,
-        zone_id: selectedZone?.id || null,
-        ward_id: selectedWard?.id || null,
-        permissions: {
-          locationEnabled: false,
-          notificationsEnabled: false,
-          manualWardNumber: manualWardNumber.trim() || selectedWard?.ward_number || null,
-          pinpointAddress: pinpointLocation ? {
-            digitalAddress: pinpointLocation.digitalAddress,
-            latitude: pinpointLocation.latitude,
-            longitude: pinpointLocation.longitude,
-            mapsUrl: pinpointLocation.mapsUrl,
-          } : null,
-          canReportIncident: true,
-          canRequestEmergency: true,
-          canReviewReports: selectedRole === 'community_leader',
-          canRespondToEmergency: selectedRole === 'community_protection_service',
-          canClockInForDuty: selectedRole === 'community_protection_service',
-          canSendCommunityAlerts: selectedRole === 'community_leader',
+      const { error: profileError } = await client.rpc('complete_my_signup_profile', {
+        p_profile: {
+          firstName: validation.values.firstName,
+          lastName: validation.values.lastName,
+          email: validation.values.email,
+          idNumber: validation.values.idNumber,
+          location: location || pinpointLocation?.digitalAddress || null,
+          requestedRole: selectedRole,
+          organizationName: selectedRole === 'community_leader' ? validation.values.organizationName : null,
+          responderType: selectedRole === 'community_protection_service' ? 'community_protection_service' : null,
+          serviceType: selectedRole === 'community_protection_service' ? 'community_protection_service' : null,
+          wardName: selectedRole === 'community_protection_service' ? cpsWardName.trim() : null,
+          province_id: selectedProvince?.id || null,
+          city_id: selectedCity?.id || null,
+          suburb_id: selectedSuburb?.id || null,
+          zone_id: selectedZone?.id || null,
+          ward_id: selectedWard?.id || null,
+          permissions: {
+            locationEnabled: false,
+            notificationsEnabled: false,
+            manualWardNumber: manualWardNumber.trim() || selectedWard?.ward_number || null,
+            pinpointAddress: pinpointLocation ? {
+              digitalAddress: pinpointLocation.digitalAddress,
+              latitude: pinpointLocation.latitude,
+              longitude: pinpointLocation.longitude,
+              mapsUrl: pinpointLocation.mapsUrl,
+            } : null,
+            canReportIncident: true,
+            canRequestEmergency: true,
+            canReviewReports: false,
+            canRespondToEmergency: false,
+            canClockInForDuty: false,
+            canSendCommunityAlerts: false,
+          },
         },
-        createdAt: new Date().toISOString(),
-        isMockUser: false,
       });
+      if (profileError) {
+        console.error('Signup profile completion failed:', profileError);
+        await client.auth.signOut({ scope: 'local' }).catch(() => {});
+        setVerificationId(null);
+        setOtp(Array(OTP_LENGTH).fill(''));
+        setStep('details');
+        Alert.alert(
+          'Profile Setup Failed',
+          'Your phone was verified, but we could not finish saving your profile. Request a new OTP and try again.',
+        );
+        return;
+      }
 
       if (pinpointLocation) {
         await insertRow('pinpoints', {

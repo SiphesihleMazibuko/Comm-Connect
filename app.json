@@ -53,6 +53,12 @@
         }
       ],
       "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Comm-Connect to use your location for WalkWithMe route requests and active walk tracking."
+        }
+      ],
       "expo-notifications",
       [
         "expo-build-properties",
